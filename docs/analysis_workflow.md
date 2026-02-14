@@ -188,8 +188,11 @@ Main outputs:
 - `outputs/task1_reviewer_fixes/analysis/retrieval_dual_report.csv`
 - `outputs/task1_reviewer_fixes/analysis/effect_calibration_summary.csv`
 - `outputs/task1_reviewer_fixes/analysis/protocol_continuous_spearman.csv`
+- `outputs/task1_reviewer_fixes/analysis/protocol_continuous_partial_spearman.csv`
 - `outputs/task1_reviewer_fixes/analysis/leave_one_cell_out_pairwise.csv`
 - `outputs/task1_reviewer_fixes/analysis/benchmarkability_zone_summary.csv`
+- `outputs/task1_reviewer_fixes/analysis/strict_subset_composition.csv`
+- `outputs/task1_reviewer_fixes/analysis/lincs_internal_consistency_summary.csv`
 
 ---
 
@@ -207,6 +210,7 @@ Main outputs:
 - `outputs/task2_nodomain/target_tier/analysis/task2_target_tier_summary.csv`
 - `outputs/task2_nodomain/target_tier/analysis/task2_target_tier_enrichment.csv`
 - `outputs/task2_nodomain/target_tier/analysis/task2_target_tier_map_used.csv`
+- `outputs/task2_nodomain/target_tier/analysis/task2_target_tier_mapping_qc.csv`
 
 ---
 
@@ -224,6 +228,24 @@ Main outputs:
 - `outputs/task3_meta/analysis/task3_model_scoreboard_meta.csv`
 - `outputs/task3_meta/analysis/task3_meta_perturbation_training_tests.csv`
 - `outputs/task3_meta/analysis/task3_meta_size_trend_tests.csv`
+- `outputs/task3_meta/analysis/task3_mean_scaled_best_definition.csv`
+
+---
+
+## 12) Reproducibility pack (recommended before manuscript freeze)
+
+Purpose: gather seeds, run manifests, environment, and one-command rerun paths.
+
+```bash
+python scripts/build_reproducibility_pack.py \
+  --output-dir ./outputs/reproducibility
+```
+
+Main outputs:
+- `outputs/reproducibility/analysis/repro_manifest_inventory.csv`
+- `outputs/reproducibility/analysis/repro_seed_registry.csv`
+- `outputs/reproducibility/analysis/repro_environment.json`
+- `outputs/reproducibility/analysis/repro_one_command_paths.md`
 
 ---
 

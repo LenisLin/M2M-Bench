@@ -1,4 +1,4 @@
-# Project Proposal: M2M-Bench (Modality-to-Mechanism Benchmark) v2.2.0
+# Project Proposal: M2M-Bench (Modality-to-Mechanism Benchmark) v2.3.0
 
 **Former name:** Chem2Gen-Bench  
 **Full subtitle:** *From Modality Concordance to Mechanism Fidelity: A Unified Perturbation Benchmark*
@@ -58,10 +58,30 @@ This same framework is applied consistently to Q1 and Q2.
   - one LINCS row ↔ one scPerturb row matched within a context by `exact_cond` (genetic) or nearest dose/time (chemical).
 - `query` (Task1 retrieval):
   - one candidate row evaluated against opposite-source gallery.
-- `context` (Task2):
-  - one tuple `(Track, View, Cell, Target, Source_Chem, Source_Gene)` in Step1/Step2 context tables.
+- `instance` (Task2 Step1):
+  - one retrieval/pairwise observation keyed by `(Track, Scenario, View, Direction, Cell, Target, Source_Chem, Source_Gene, Dose, Time, CondID)`.
+- `context` (Task2 Step1 aggregated):
+  - one tuple `(Track, View, Cell, Target, Source_Chem, Source_Gene)`.
+- `labeled_context` (Task2 Step2):
+  - one tuple `(Cell, Target)` with `Mean_Success`, `Peak_Success`, and `Performance_Class`.
 - `class` (Task2):
   - one context label in `{Robust_High, Intermediate, Robust_Low, Protocol_Sensitive}`.
+
+## 2.3 Primary endpoints + non-claims (submission lock)
+
+- **Task1 primary endpoints:**
+  - pairwise `mean cosine_gene` with cross-vs-within calibration,
+  - balanced retrieval `MRR` (gallery=256, true=1) with random baseline.
+- **Task2 primary endpoints:**
+  - class composition on `labeled_context` table,
+  - protocol-sensitive association counts.
+- **Task3 primary endpoints:**
+  - retrieval `Mean_MRR`,
+  - pairwise `Mean_CentroidCosine`.
+- **Non-claims to state explicitly:**
+  - no broad chemical generalization beyond sparse overlap,
+  - no global drug↔gene mechanism equivalence,
+  - no universal best FM.
 
 ---
 
@@ -356,6 +376,7 @@ Release actions for every merged update:
 
 | Date | Version | Type | Summary | Breaking? | Owner |
 | --- | --- | --- | --- | --- | --- |
+| 2026-02-14 | v2.3.0 | MINOR | Added submission-critical robustness upgrades: Task1 deconfounded protocol sensitivity via partial Spearman (`protocol_continuous_partial_spearman.csv`), strict-subset composition table (`strict_subset_composition.csv`), and full LINCS chemical internal-consistency analysis (`lincs_internal_consistency_*.csv`); marked Task2 target-tier layer as explicit sensitivity analysis with mapping QC output (`task2_target_tier_mapping_qc.csv`); clarified Task3 aggregate score definition with explicit export (`task3_mean_scaled_best_definition.csv`); added reproducibility-pack builder (`scripts/build_reproducibility_pack.py`) generating manifest/seed/environment/one-command artifacts under `outputs/reproducibility/analysis`. | No | Team |
 | 2026-02-14 | v2.2.0 | MINOR | Added reviewer-critical robustness modules and outputs: Task1 add-on analyses (`scripts/task1_reviewer_addons.py`) for retrieval raw+balanced+random baseline reporting, cross-vs-within effect-size calibration, continuous dose/time sensitivity, leave-one-cell-out (including HEPG2) sensitivity, and benchmarkability-zone mapping; Task2 target-confidence/polypharmacology stratification (`scripts/task2_target_tier_analysis.py`); Task3 FM meta-analysis (`scripts/task3_fm_meta_analysis.py`). Updated plan contracts to lock claim hierarchy and analysis-unit definitions. | No | Team |
 | 2026-02-14 | v2.1.1 | PATCH | Refined Task1 documentation contract with mandatory full-vs-strict protocol comparison and raw-vs-balanced retrieval reporting; appended current empirical snapshot from the 2026-02-14 rerun for co-author discussion. | No | Team |
 | 2026-02-14 | v2.1.0 | MINOR | Added strict protocol subset analysis for Task1 (dose/time thresholds) and balanced retrieval evaluation to control candidate-space imbalance; added CSV export option for `unified_meta` and parquet-safe fallbacks; exposed new flags via Task1 pipeline and updated manuscript proposal to reflect mitigations. | No | Team |
