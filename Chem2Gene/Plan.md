@@ -1,4 +1,4 @@
-# Project Proposal: M2M-Bench (Modality-to-Mechanism Benchmark) v1.1.0
+# Project Proposal: M2M-Bench (Modality-to-Mechanism Benchmark) v2.1.0
 
 **Former name:** Chem2Gen-Bench  
 **Full subtitle:** *From Modality Concordance to Mechanism Fidelity: A Unified Perturbation Benchmark*
@@ -49,6 +49,10 @@ This same framework is applied consistently to Q1 and Q2.
 
 - Shared curated gene universe (~2.5k genes)
 - Standardized metadata fields (e.g., `cell_std`, `target_std`, `modality`, `source_db`, dose/time fields)
+- Canonical field semantics:
+  - `target_std`: **target gene label only** (standardized string), not including treatment type
+  - `modality` / treatment type: perturbation class (`Chemical` or `Genetic`)
+  - Recommended composite key when needed: (`cell_std`, `modality`, `target_std`)
 
 ## 3.3 Subset design
 
@@ -62,9 +66,94 @@ This same framework is applied consistently to Q1 and Q2.
 1. **Standard view**: raw differential signatures
 2. **Systema view**: background-subtracted signatures for stress/systematic component control
 
+## 3.5 Canonical data structure (Task 0 outputs)
+
+Task 0 (`scripts/task0_curate_data.py`) writes a stable structure:
+
+- `outputs/task0_curated/metadata/`
+  - `unified_meta.parquet`
+  - `level1_pairs_meta.parquet`
+  - `level1_pairs_unique.parquet`
+  - `level1_pair_stats.parquet`
+  - `level2_chem_pool.parquet`, `level2_gene_pool.parquet`, `level2_pair_stats.parquet`
+  - `level3_chem_pool.parquet`, `level3_gene_pool.parquet`, `level3_pair_stats.parquet`
+- `outputs/task0_curated/tensors/Level1_Tensors_Split/`
+  - `L1_chem_x.pt`, `L1_chem_y_gene.pt`, `L1_chem_y_path.pt`
+  - `L1_gene_x.pt`, `L1_gene_y_gene.pt`, `L1_gene_y_path.pt`
+  - `manifest_level1_tensors.json`
+- `outputs/task0_curated/bundle/m2m_task0_bundle.pt` (optional unified object)
+- `outputs/task0_curated/run_manifest_task0.json` (run config + summary + output pointers)
+
+Core metadata fields used across tasks:
+
+- identity/context: `cell_std`, `target_std`, `modality`, `source_db`, `pair_id`
+- technical pointers: `uid`, `global_idx`, `chunk_file`, `chunk_idx`
+- protocol/context covariates: `dose_val`, `time_val`, `tissue`, `disease`, `cond_id`
+
+Important identity note:
+
+- `pair_id = cell_std:target_std` is gene-centered and does **not** include treatment type.
+- Treatment type should be carried/stratified explicitly via `modality` (or `modality_chem` / `modality_gene` in paired tables).
+
+Tensor semantics:
+
+- `x`: baseline representation
+- `y_gene`: gene-level perturbation delta
+- `y_path`: pathway-level perturbation delta
+
 ---
 
 # Part 4. Three-Task Project Structure
+
+## 4.0 Task-wise data usage (what data to use)
+
+### Task 1 — Modality Concordance (Q1)
+
+Use:
+
+- `unified_meta.parquet` as the source table for cross-source matching.
+- A Task 1 matched table (**M1**) derived from `unified_meta` with keys:
+  - same `cell_std`,
+  - same `modality` (treatment type),
+  - same `target_std` (gene label),
+  - source contrast fixed as LINCS vs scPerturb,
+  - best-available protocol matching (`dose_val`, `time_val`, `cond_id`).
+- Raw deltas from source tensors/chunks for matched instances.
+
+Do not use as primary input:
+
+- L2/L3 pools (these are not the primary modality concordance unit).
+
+### Task 2 — Mechanism Fidelity (Q2)
+
+Use:
+
+- `level1_pairs_meta.parquet` and `level1_pairs_unique.parquet` for gold pair logic.
+- L1 split tensors (`L1_chem_*`, `L1_gene_*`) for pairwise/retrieval core metrics.
+- `level2_*` pools for target generalization diagnostics.
+- `level3_*` pools for Systema-style background estimates.
+- `level*_pair_stats.parquet` for QC and denominator checks.
+
+Evaluation unit:
+
+- For each (`cell_std`, `target_std`), compare **Chemical vs Genetic** effects (treatment type separated by design).
+
+### Task 3 — Foundation Model Stress Test
+
+Use:
+
+- Matched K562 evaluation-set data (Task 3 specific, independent from Task 0 pools).
+- FM embedding outputs from `8_Task3_*.py`.
+- Cell-level delta artifacts from `9_Task3_PrepareAnalysis.py`.
+- Analysis/report tables from `10_Task3_AnalyzeOutputs.py` and `11_Task3_OutputCollect.py`.
+
+Target filtering rule:
+
+- Keep targets that appear in **both** modalities on K562 (at least one Drug perturbation and one Genetic perturbation for the same target gene), with controls retained.
+
+Interpretation rule:
+
+- Task 3 model conclusions must be interpreted against Task 2 stability classes and Task 1 modality reliability context.
 
 ## Task 1 — Modality Concordance Benchmark (Q1)
 
@@ -89,6 +178,12 @@ This same framework is applied consistently to Q1 and Q2.
 ## Task 2 — Chemical–Genetic Mechanism Fidelity (Q2; original Chem2Gene core)
 
 **Goal:** measure and explain drug↔gene transferability after confounder-aware control.
+
+**Primary analysis contract (updated):**
+
+- Task 2 main hypothesis testing **does not use SameDomain vs CrossDomain as a primary contrast**.
+- Domain/source fields are retained for diagnostics, provenance, and sensitivity analysis only.
+- Main reporting axis is mechanism fidelity under matched chemical↔genetic contexts, not platform-domain stratification.
 
 ### 2A. Pairwise gap quantification
 - Retain existing pairwise metrics pipeline (`3_Task1_Pairwise_Test.py`).
@@ -171,6 +266,8 @@ This same framework is applied consistently to Q1 and Q2.
 - Code must be **well-annotated**: short docstrings/comments explaining intent, assumptions, and non-obvious steps.
 - Avoid silent behavior: key filters/drops must be logged to console and/or output files.
 - Keep reproducibility: fixed random seeds for null/permutation/bootstrapping workflows.
+- For analysis-heavy tasks, prefer **single, end-to-end data-analysis scripts** with explicit step blocks (load → transform → test → export), so users can read/modify workflow in one file.
+- If helper modules are used, each script must still expose clear stage outputs (CSV/MD/manifest) without requiring deep code tracing.
 
 ## 6.2 Output and traceability rules
 
@@ -200,6 +297,16 @@ Release actions for every merged update:
 
 | Date | Version | Type | Summary | Breaking? | Owner |
 | --- | --- | --- | --- | --- | --- |
+| 2026-02-14 | v2.1.0 | MINOR | Added strict protocol subset analysis for Task1 (dose/time thresholds) and balanced retrieval evaluation to control candidate-space imbalance; added CSV export option for `unified_meta` and parquet-safe fallbacks; exposed new flags via Task1 pipeline and updated manuscript proposal to reflect mitigations. | No | Team |
+| 2026-02-13 | v2.0.2 | PATCH | Updated Task2 analysis script (`scripts/task2_mechanism_analysis.py`) to support explicit domain scope and default to `same_only`, so mechanism analysis can be constrained to SameDomain data when required. Added Task3 engineering cleanup: `scripts/task3_results_audit.py` (objective consistency checks) and `scripts/task3_pipeline.py` (readable wrapper for Task3 scripts 9/10/11 + audit). Updated `docs/analysis_workflow.md` with Task3 audit/pipeline commands. | No | Team |
+| 2026-02-13 | v2.0.1 | PATCH | Refactored Task0/Task1 script layer for readability and maintainability: added unified script bootstrap (`scripts/_script_bootstrap.py`), upgraded Task0/Task1 pipeline entrypoints (`scripts/task0_pipeline.py`, `scripts/task1_pipeline.py`) with stronger path fallback and manifest conventions, and aligned legacy Task0/Task1 wrappers to readable/compatible entry behavior. Updated `docs/analysis_workflow.md` with recommended Task0/Task1 pipeline commands. | No | Team |
+| 2026-02-13 | v2.0.0 | MAJOR | Updated Task 2 interpretation contract: removed SameDomain vs CrossDomain as a primary comparison; re-centered Task 2 on mechanism-fidelity analysis with source/domain used only for diagnostics. Added readable analysis-style scripts: `scripts/task01_attrition_audit.py`, `scripts/task2_mechanism_analysis.py`, and `scripts/task2_results_audit.py`. Added Task0→Task1 attrition audit outputs and Task2 result consistency audit outputs. | Yes | Team |
+| 2026-02-13 | v1.1.6 | PATCH | Added Task 1 retrieval parquet→CSV fallback loader and wrote `m1_candidates.csv` during group-wise pipeline for environment portability. | No | Team |
+| 2026-02-13 | v1.1.5 | PATCH | Added Task 1 instance-level retrieval pipeline (`src/m2m_bench/task1/retrieval_instance.py`) with per-query and summary CSV outputs, null baseline summary, and example retrieval cases. Added `docs/task1_retrieval_spec.md`. | No | Team |
+| 2026-02-12 | v1.1.4 | PATCH | Implemented Task 1 standalone pipeline (`src/m2m_bench/task1/groupwise_gap.py`) with independent data extraction, M1 matching, QC tables/plots, and CSV-first group-wise modality gap outputs. Added `docs/task1_data_spec.md`. | No | Team |
+| 2026-02-12 | v1.1.3 | PATCH | Clarified canonical field semantics: `target_std` is gene-only, treatment type is `modality`; formalized task-wise matching keys for Task1/Task2/Task3. | No | Team |
+| 2026-02-12 | v1.1.2 | PATCH | Added canonical Task 0 data structure documentation and explicit task-wise data usage guide (Task1/Task2/Task3) to improve project navigation. | No | Team |
+| 2026-02-12 | v1.1.1 | PATCH | Added configurable Task 0 curation code under `src/m2m_bench/task0` with CLI entrypoint and local-output-friendly path defaults. | No | Team |
 | 2026-02-12 | v1.1.0 | MINOR | Renamed project to M2M-Bench; updated title/subtitle; added project naming dictionary for consistent manuscript/code usage. | No | Team |
 | 2026-02-12 | v1.0.0 | MAJOR | Renamed project to PerFi-Bench; unified two-question architecture (modality + mechanism); formalized 3-task structure and governance rules. | Yes | Team |
 
