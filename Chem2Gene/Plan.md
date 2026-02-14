@@ -1,4 +1,4 @@
-# Project Proposal: M2M-Bench (Modality-to-Mechanism Benchmark) v2.1.1
+# Project Proposal: M2M-Bench (Modality-to-Mechanism Benchmark) v2.2.0
 
 **Former name:** Chem2Gen-Bench  
 **Full subtitle:** *From Modality Concordance to Mechanism Fidelity: A Unified Perturbation Benchmark*
@@ -34,6 +34,34 @@ The project keeps and extends your existing framework with three analysis engine
 3. **Confounder analysis** (cell, source, dose/time, tier, protocol sensitivity)
 
 This same framework is applied consistently to Q1 and Q2.
+
+## 2.1 Claim hierarchy (locked for manuscript)
+
+- **Primary contribution (what this paper contributes):**
+  - a reusable **evaluation-and-audit standard** for modality→mechanism benchmarking,
+  - including coverage audit, protocol-mismatch diagnostics, candidate-bias controlled retrieval, and confounder-aware interpretation.
+- **Primary empirical finding (what the benchmark finds):**
+  - cross-modality concordance is low and strongly context-dependent under current overlap.
+- **Secondary findings:**
+  - mechanism fidelity is context/tier dependent;
+  - FM performance is direction/view dependent without a universal winner.
+
+## 2.2 Analysis-unit dictionary (for Fig1 + Methods)
+
+- `row`:
+  - one perturbation profile in unified metadata (`unified_meta`), tied to one tensor pointer.
+- `context` (Task1):
+  - one tuple `(cell_std, modality, target_std)`.
+- `candidate row` (Task1):
+  - one `row` inside an overlap context where both LINCS and scPerturb exist.
+- `matched pair` (Task1):
+  - one LINCS row ↔ one scPerturb row matched within a context by `exact_cond` (genetic) or nearest dose/time (chemical).
+- `query` (Task1 retrieval):
+  - one candidate row evaluated against opposite-source gallery.
+- `context` (Task2):
+  - one tuple `(Track, View, Cell, Target, Source_Chem, Source_Gene)` in Step1/Step2 context tables.
+- `class` (Task2):
+  - one context label in `{Robust_High, Intermediate, Robust_Low, Protocol_Sensitive}`.
 
 ---
 
@@ -171,10 +199,19 @@ Interpretation rule:
 - LINCS query → scPerturb gallery and reverse.
 - Evaluate Top-k, MRR, and failure strata.
 - Report both raw retrieval and balanced retrieval (fixed gallery size + fixed positives).
+- Always include random baselines:
+  - empirical null from permutation,
+  - theoretical balanced baseline (`Top1 = 1/N`, `MRR = H_N/N` when one positive).
 
 ### 1C. Confounder decomposition
 - Quantify effect of cell context, target class, dose/time mismatch, source, and perturbation class.
 - Label contexts as **Robust / Conditional / Unstable** for downstream interpretation.
+
+### 1D. Reviewer-critical robustness extensions
+- **Effect-size calibration:** compare cross-modality cosine against within-modality replicate cosine (LINCS-within, sc-within).
+- **Continuous protocol sensitivity:** model cosine trends along continuous `dose_logdiff` and `time_absdiff` (not only strict cutoff).
+- **Composition-bias sensitivity:** report cell-stratified and leave-one-cell-out summaries (including `leave-HEPG2-out`).
+- **Benchmarkability map:** classify contexts into comparability zones (`NoOverlap`, `ChemicalNearest`, `GeneticExact`).
 
 **Primary output:** modality reliability table per context (used as interpretation guardrail in Task 2).
 
@@ -203,6 +240,10 @@ Interpretation rule:
 - Produce Consistently_Good / Consistently_Bad / Conditionally_Good classes.
 - Evaluate dose/time/context sensitivity and target-tier behavior.
 
+### 2D. Target-confidence / polypharmacology stratification
+- Add explicit target-tier annotation (`HighConfidence`, `ModerateOrUnknown`, `AmbiguousOrPolypharm`).
+- Report class composition and enrichment under tier stratification.
+
 **Interpretation rule:** report mechanism conclusions jointly with Task 1 modality reliability.
 
 ---
@@ -222,6 +263,12 @@ Interpretation rule:
 ### 3C. Fidelity-to-ground-truth check
 - Correlate FM implied alignment with Task 2 ground-truth stability labels.
 
+### 3D. Model meta-analysis
+- Relate Task3 score slices to model attributes:
+  - `size_class` (baseline / fm_standard / fm_large),
+  - `perturbation_trained` flag.
+- Report trend tests and group contrasts at the score-slice level.
+
 ---
 
 # Part 5. Detailed Step-by-Step Execution Plan
@@ -239,27 +286,33 @@ Interpretation rule:
 6. Run strict protocol subset metrics and compare with full results.
 7. Run bidirectional retrieval with raw and balanced candidate-space settings.
 8. Run confounder decomposition and produce modality reliability labels.
-9. Publish Task 1 summary tables and QC diagnostics.
+9. Compute effect-size calibration (cross vs within replicates).
+10. Compute continuous dose/time sensitivity curves and trend tests.
+11. Run cell-stratified + leave-one-cell-out sensitivity (including HEPG2 leave-out).
+12. Build benchmarkability zone map and coverage summary.
+13. Publish Task 1 summary tables and QC diagnostics.
 
 ## Phase C — Task 2 execution (Mechanism Fidelity)
 
-10. Run pairwise metrics on L1/L2/L3 with existing hardened pipeline.
-11. Run retrieval scenarios A/B/C with existing multi-scenario pipeline.
-12. Run attribution/protocol sensitivity module and generate context classes.
-13. Integrate Task 1 reliability labels into Task 2 interpretation tables.
+14. Run pairwise metrics on L1/L2/L3 with existing hardened pipeline.
+15. Run retrieval scenarios A/B/C with existing multi-scenario pipeline.
+16. Run attribution/protocol sensitivity module and generate context classes.
+17. Add target-confidence/polypharmacology stratification outputs.
+18. Integrate Task 1 reliability labels into Task 2 interpretation tables.
 
 ## Phase D — Task 3 execution (FM Stress Test)
 
-14. Generate FM embeddings on matched evaluation set.
-15. Compute cell-level deltas and Standard/Systema variants.
-16. Run retrieval/pairwise FM scoreboard and subgroup analyses.
-17. Link FM fidelity scores to Task 2 ground-truth classes.
+19. Generate FM embeddings on matched evaluation set.
+20. Compute cell-level deltas and Standard/Systema variants.
+21. Run retrieval/pairwise FM scoreboard and subgroup analyses.
+22. Run model meta-analysis (`size_class`, `perturbation_trained`).
+23. Link FM fidelity scores to Task 2 ground-truth classes.
 
 ## Phase E — Release packaging
 
-18. Produce unified result bundle (tables, metadata, manifests, logs).
-19. Update version + change log in this `Plan.md`.
-20. Tag release in GitHub using semantic versioning.
+24. Produce unified result bundle (tables, metadata, manifests, logs).
+25. Update version + change log in this `Plan.md`.
+26. Tag release in GitHub using semantic versioning.
 
 ---
 
@@ -303,6 +356,7 @@ Release actions for every merged update:
 
 | Date | Version | Type | Summary | Breaking? | Owner |
 | --- | --- | --- | --- | --- | --- |
+| 2026-02-14 | v2.2.0 | MINOR | Added reviewer-critical robustness modules and outputs: Task1 add-on analyses (`scripts/task1_reviewer_addons.py`) for retrieval raw+balanced+random baseline reporting, cross-vs-within effect-size calibration, continuous dose/time sensitivity, leave-one-cell-out (including HEPG2) sensitivity, and benchmarkability-zone mapping; Task2 target-confidence/polypharmacology stratification (`scripts/task2_target_tier_analysis.py`); Task3 FM meta-analysis (`scripts/task3_fm_meta_analysis.py`). Updated plan contracts to lock claim hierarchy and analysis-unit definitions. | No | Team |
 | 2026-02-14 | v2.1.1 | PATCH | Refined Task1 documentation contract with mandatory full-vs-strict protocol comparison and raw-vs-balanced retrieval reporting; appended current empirical snapshot from the 2026-02-14 rerun for co-author discussion. | No | Team |
 | 2026-02-14 | v2.1.0 | MINOR | Added strict protocol subset analysis for Task1 (dose/time thresholds) and balanced retrieval evaluation to control candidate-space imbalance; added CSV export option for `unified_meta` and parquet-safe fallbacks; exposed new flags via Task1 pipeline and updated manuscript proposal to reflect mitigations. | No | Team |
 | 2026-02-13 | v2.0.2 | PATCH | Updated Task2 analysis script (`scripts/task2_mechanism_analysis.py`) to support explicit domain scope and default to `same_only`, so mechanism analysis can be constrained to SameDomain data when required. Added Task3 engineering cleanup: `scripts/task3_results_audit.py` (objective consistency checks) and `scripts/task3_pipeline.py` (readable wrapper for Task3 scripts 9/10/11 + audit). Updated `docs/analysis_workflow.md` with Task3 audit/pipeline commands. | No | Team |
@@ -357,27 +411,70 @@ Usage rule:
 
 ---
 
-# Part 10. Current Empirical Snapshot (2026-02-14 rerun)
+# Part 10. Current Empirical Snapshot (2026-02-14 rerun + reviewer add-ons)
 
-Task1 (modality concordance):
+Task1 baseline:
 
 - matched pairs (full): `670`
 - strict protocol subset: `313` (`46.7%`)
-- strict subset composition: `Genetic exact_cond only` (current chemical strict pairs: `0`)
+- strict subset composition: `Genetic exact_cond only` (chemical strict pairs: `0`)
 - global mean cosine (full): gene/path `0.0238 / 0.0599`
 - global mean cosine (strict): gene/path `0.0060 / 0.0527`
 
-Task1 retrieval (raw vs balanced):
+Task1 retrieval dual report (`outputs/task1_reviewer_fixes/analysis/retrieval_dual_report.csv`):
 
-- balanced setting: fixed gallery size `256`, fixed positives per query `1`
-- chemical mean MRR (across directions/tracks): `0.598 -> 0.104`
-- chemical mean Top1 (across directions/tracks): `0.489 -> 0.062`
-- interpretation: raw retrieval is materially affected by candidate-space composition.
+- balanced setting: gallery `256`, positives `1`
+- theoretical balanced random baselines: `Top1=1/256=0.003906`, `MRR=H256/256=0.023923`
+- chemical mean MRR: raw `0.598` → balanced `0.104` (still `4.36×` random)
+- chemical mean Top1: raw `0.489` → balanced `0.062`
+- genetic mean MRR: raw `0.073` → balanced `0.032` (`1.36×` random)
 
-Task2 (same-domain mechanism fidelity):
+Task1 effect-size calibration (`outputs/task1_reviewer_fixes/analysis/effect_calibration_summary.csv`):
 
-- class counts: `Robust_High=567`, `Intermediate=1020`, `Robust_Low=1020`, `Protocol_Sensitive=454`
+- chemical gene track:
+  - within-average `0.125`, cross-matched `0.039`, ratio `0.314`
+- genetic gene track:
+  - within-average `0.055`, cross-matched `0.006`, ratio `0.109`
+- interpretation: cross-modality agreement is far below within-modality replicate consistency.
 
-Task3 (foundation-model stress test):
+Task1 protocol continuous sensitivity (`outputs/task1_reviewer_fixes/analysis/protocol_continuous_spearman.csv`):
 
-- no universal best model; winner depends on direction/view.
+- `dose_logdiff` vs `cosine_gene`: rho `+0.169`, p `0.0013`
+- `time_absdiff` vs `cosine_gene`: rho `-0.255`, p `<1e-5`
+- `time_absdiff` vs `cosine_path`: rho `-0.250`, p `<1e-5`
+- note: strict cutoff-only reporting is insufficient; continuous mismatch trends are non-trivial.
+
+Task1 composition-bias sensitivity:
+
+- leave-HEPG2-out (pairwise):
+  - ALL mean cosine gene/path `0.0238 / 0.0599`
+  - leave-HEPG2 mean cosine gene/path `0.0377 / 0.0630`
+  - genetic-only drops from `0.0060 / 0.0527` to `-0.0087 / -0.0275`
+- leave-HEPG2-out (retrieval, mean over 8 groups):
+  - MRR `0.3358 → 0.3100`
+  - balanced MRR `0.0684 → 0.0641`
+
+Task1 benchmarkability map (`outputs/task1_reviewer_fixes/analysis/benchmarkability_zone_summary.csv`):
+
+- `Z0_NoCrossSourceOverlap`: Chemical `16,761` contexts; Genetic `91,868` contexts
+- `Z1_ChemicalNearestOnly`: `2` contexts (A549 `HSP90AA1`, `SIRT1`)
+- `Z3_GeneticExactComparable`: `82` contexts
+
+Task2 target-tier stratification (`outputs/task2_nodomain/target_tier/analysis/`):
+
+- target tiers:
+  - `Tier_A_HighConfidence`: `84` contexts (`6` targets)
+  - `Tier_B_ModerateOrUnknown`: `2,946` contexts (`407` targets)
+  - `Tier_C_AmbiguousOrPolypharm`: `31` contexts (`3` targets)
+- significant enrichments (FDR<0.05):
+  - `Robust_High` enriched in `Tier_A` (log2OR `+2.37`)
+  - `Protocol_Sensitive` enriched in `Tier_C` (log2OR `+2.47`)
+
+Task3 FM meta-analysis (`outputs/task3_meta/analysis/`):
+
+- top overall mean scaled score: `scGPT (0.684)`, followed by `PCA200 (0.647)`
+- no robust universal gain for perturbation-trained models across slices
+  (best p-value `0.058`, non-significant after multiple comparisons).
+- size-class trends are metric-dependent:
+  - strong positive trend only for pairwise `Mean_NegEDist` (rho `0.699`, p `3.4e-08`)
+  - retrieval metrics show weak/mixed size effects.

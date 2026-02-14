@@ -168,6 +168,65 @@ python scripts/task3_pipeline.py --dry-run
 
 ---
 
+## 9) Task1 reviewer add-ons (must-run for manuscript robustness)
+
+Purpose: generate reviewer-critical robustness outputs without rerunning heavy Task1 core pipeline.
+
+```bash
+python scripts/task1_reviewer_addons.py \
+  --m1-candidates-path ./outputs/task1/data/m1_candidates.csv \
+  --per-pair-path ./outputs/task1/analysis/modality_gap_per_pair.csv \
+  --retrieval-summary-path ./outputs/task1/retrieval/analysis/retrieval_summary.csv \
+  --retrieval-null-path ./outputs/task1/retrieval/analysis/retrieval_null_summary.csv \
+  --retrieval-per-query-path ./outputs/task1/retrieval/analysis/retrieval_per_query.csv \
+  --context-overlap-path ./outputs/task1_audit/analysis/context_overlap_counts.csv \
+  --processed-dir /mnt/NAS_21T/ProjectData/OSMOSIS/processed \
+  --output-dir ./outputs/task1_reviewer_fixes
+```
+
+Main outputs:
+- `outputs/task1_reviewer_fixes/analysis/retrieval_dual_report.csv`
+- `outputs/task1_reviewer_fixes/analysis/effect_calibration_summary.csv`
+- `outputs/task1_reviewer_fixes/analysis/protocol_continuous_spearman.csv`
+- `outputs/task1_reviewer_fixes/analysis/leave_one_cell_out_pairwise.csv`
+- `outputs/task1_reviewer_fixes/analysis/benchmarkability_zone_summary.csv`
+
+---
+
+## 10) Task2 target-tier stratification (recommended)
+
+Purpose: add target-confidence / polypharmacology tier analysis on top of Task2 context labels.
+
+```bash
+python scripts/task2_target_tier_analysis.py \
+  --context-labels-path ./outputs/task2_nodomain/analysis/Step2_Context_Labels_NoDomain.csv \
+  --output-dir ./outputs/task2_nodomain/target_tier
+```
+
+Main outputs:
+- `outputs/task2_nodomain/target_tier/analysis/task2_target_tier_summary.csv`
+- `outputs/task2_nodomain/target_tier/analysis/task2_target_tier_enrichment.csv`
+- `outputs/task2_nodomain/target_tier/analysis/task2_target_tier_map_used.csv`
+
+---
+
+## 11) Task3 model meta-analysis (recommended)
+
+Purpose: relate Task3 performance to model attributes (`size_class`, `perturbation_trained`).
+
+```bash
+python scripts/task3_fm_meta_analysis.py \
+  --scoreboard-long-path /mnt/NAS_21T/ProjectData/Chem2Gen/R_Vis_Ready/Task3_Unified/viz_scoreboard_long.csv \
+  --output-dir ./outputs/task3_meta
+```
+
+Main outputs:
+- `outputs/task3_meta/analysis/task3_model_scoreboard_meta.csv`
+- `outputs/task3_meta/analysis/task3_meta_perturbation_training_tests.csv`
+- `outputs/task3_meta/analysis/task3_meta_size_trend_tests.csv`
+
+---
+
 ## Notes
 
 - Refactored scripts use explicit stage blocks and CSV-first outputs for easier debugging.
