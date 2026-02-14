@@ -1,4 +1,4 @@
-# Project Proposal: M2M-Bench (Modality-to-Mechanism Benchmark) v2.1.0
+# Project Proposal: M2M-Bench (Modality-to-Mechanism Benchmark) v2.1.1
 
 **Former name:** Chem2Gen-Bench  
 **Full subtitle:** *From Modality Concordance to Mechanism Fidelity: A Unified Perturbation Benchmark*
@@ -72,6 +72,7 @@ Task 0 (`scripts/task0_curate_data.py`) writes a stable structure:
 
 - `outputs/task0_curated/metadata/`
   - `unified_meta.parquet`
+  - `unified_meta.csv` (parquet-free fallback)
   - `level1_pairs_meta.parquet`
   - `level1_pairs_unique.parquet`
   - `level1_pair_stats.parquet`
@@ -160,12 +161,16 @@ Interpretation rule:
 **Goal:** quantify LINCS↔scPerturb agreement for the same perturbation context.
 
 ### 1A. Group-wise modality gap
-- Compare matched pairs in M1 using `cosine`, `cosine_z`, and `edist` (Standard/Systema).
+- Compare matched pairs in M1 using `cosine`, `cosine_z`, `l2`, and `edist`.
 - Build stratified null distributions and confidence intervals.
+- Run strict protocol subset as a required sensitivity analysis:
+  - Chemical: keep only pairs with controlled `dose_logdiff` and `time_absdiff`.
+  - Genetic: keep `exact_cond` pairs.
 
 ### 1B. Cross-source retrieval
 - LINCS query → scPerturb gallery and reverse.
 - Evaluate Top-k, MRR, and failure strata.
+- Report both raw retrieval and balanced retrieval (fixed gallery size + fixed positives).
 
 ### 1C. Confounder decomposition
 - Quantify effect of cell context, target class, dose/time mismatch, source, and perturbation class.
@@ -230,30 +235,31 @@ Interpretation rule:
 ## Phase B — Task 1 implementation (Modality Concordance)
 
 4. Build M1 matched index (same cell + same perturbation + best condition match).
-5. Run group-wise modality metrics (Standard/Systema).
-6. Run bidirectional cross-source retrieval.
-7. Run confounder decomposition and produce modality reliability labels.
-8. Publish Task 1 summary tables and QC diagnostics.
+5. Run group-wise modality metrics on full matched pairs.
+6. Run strict protocol subset metrics and compare with full results.
+7. Run bidirectional retrieval with raw and balanced candidate-space settings.
+8. Run confounder decomposition and produce modality reliability labels.
+9. Publish Task 1 summary tables and QC diagnostics.
 
 ## Phase C — Task 2 execution (Mechanism Fidelity)
 
-9. Run pairwise metrics on L1/L2/L3 with existing hardened pipeline.
-10. Run retrieval scenarios A/B/C with existing multi-scenario pipeline.
-11. Run attribution/protocol sensitivity module and generate context classes.
-12. Integrate Task 1 reliability labels into Task 2 interpretation tables.
+10. Run pairwise metrics on L1/L2/L3 with existing hardened pipeline.
+11. Run retrieval scenarios A/B/C with existing multi-scenario pipeline.
+12. Run attribution/protocol sensitivity module and generate context classes.
+13. Integrate Task 1 reliability labels into Task 2 interpretation tables.
 
 ## Phase D — Task 3 execution (FM Stress Test)
 
-13. Generate FM embeddings on matched evaluation set.
-14. Compute cell-level deltas and Standard/Systema variants.
-15. Run retrieval/pairwise FM scoreboard and subgroup analyses.
-16. Link FM fidelity scores to Task 2 ground-truth classes.
+14. Generate FM embeddings on matched evaluation set.
+15. Compute cell-level deltas and Standard/Systema variants.
+16. Run retrieval/pairwise FM scoreboard and subgroup analyses.
+17. Link FM fidelity scores to Task 2 ground-truth classes.
 
 ## Phase E — Release packaging
 
-17. Produce unified result bundle (tables, metadata, manifests, logs).
-18. Update version + change log in this `Plan.md`.
-19. Tag release in GitHub using semantic versioning.
+18. Produce unified result bundle (tables, metadata, manifests, logs).
+19. Update version + change log in this `Plan.md`.
+20. Tag release in GitHub using semantic versioning.
 
 ---
 
@@ -297,6 +303,7 @@ Release actions for every merged update:
 
 | Date | Version | Type | Summary | Breaking? | Owner |
 | --- | --- | --- | --- | --- | --- |
+| 2026-02-14 | v2.1.1 | PATCH | Refined Task1 documentation contract with mandatory full-vs-strict protocol comparison and raw-vs-balanced retrieval reporting; appended current empirical snapshot from the 2026-02-14 rerun for co-author discussion. | No | Team |
 | 2026-02-14 | v2.1.0 | MINOR | Added strict protocol subset analysis for Task1 (dose/time thresholds) and balanced retrieval evaluation to control candidate-space imbalance; added CSV export option for `unified_meta` and parquet-safe fallbacks; exposed new flags via Task1 pipeline and updated manuscript proposal to reflect mitigations. | No | Team |
 | 2026-02-13 | v2.0.2 | PATCH | Updated Task2 analysis script (`scripts/task2_mechanism_analysis.py`) to support explicit domain scope and default to `same_only`, so mechanism analysis can be constrained to SameDomain data when required. Added Task3 engineering cleanup: `scripts/task3_results_audit.py` (objective consistency checks) and `scripts/task3_pipeline.py` (readable wrapper for Task3 scripts 9/10/11 + audit). Updated `docs/analysis_workflow.md` with Task3 audit/pipeline commands. | No | Team |
 | 2026-02-13 | v2.0.1 | PATCH | Refactored Task0/Task1 script layer for readability and maintainability: added unified script bootstrap (`scripts/_script_bootstrap.py`), upgraded Task0/Task1 pipeline entrypoints (`scripts/task0_pipeline.py`, `scripts/task1_pipeline.py`) with stronger path fallback and manifest conventions, and aligned legacy Task0/Task1 wrappers to readable/compatible entry behavior. Updated `docs/analysis_workflow.md` with recommended Task0/Task1 pipeline commands. | No | Team |
@@ -347,3 +354,30 @@ Usage rule:
 
 - In repository docs and manuscript drafts, use: **M2M-Bench**.
 - At first mention in formal writing, use: **M2M-Bench (formerly Chem2Gen-Bench)**.
+
+---
+
+# Part 10. Current Empirical Snapshot (2026-02-14 rerun)
+
+Task1 (modality concordance):
+
+- matched pairs (full): `670`
+- strict protocol subset: `313` (`46.7%`)
+- strict subset composition: `Genetic exact_cond only` (current chemical strict pairs: `0`)
+- global mean cosine (full): gene/path `0.0238 / 0.0599`
+- global mean cosine (strict): gene/path `0.0060 / 0.0527`
+
+Task1 retrieval (raw vs balanced):
+
+- balanced setting: fixed gallery size `256`, fixed positives per query `1`
+- chemical mean MRR (across directions/tracks): `0.598 -> 0.104`
+- chemical mean Top1 (across directions/tracks): `0.489 -> 0.062`
+- interpretation: raw retrieval is materially affected by candidate-space composition.
+
+Task2 (same-domain mechanism fidelity):
+
+- class counts: `Robust_High=567`, `Intermediate=1020`, `Robust_Low=1020`, `Protocol_Sensitive=454`
+
+Task3 (foundation-model stress test):
+
+- no universal best model; winner depends on direction/view.

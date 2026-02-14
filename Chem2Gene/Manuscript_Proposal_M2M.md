@@ -1,12 +1,12 @@
 # M2M-Bench Manuscript Proposal (Draft for Co-author Review)
 
-**Version:** v0.2 (2026-02-14)  
+**Version:** v0.3 (2026-02-14)  
 **Project:** M2M-Bench (*From Modality Concordance to Mechanism Fidelity*)  
 **Goal of this document:** provide a concrete writing/figure proposal with real values from current outputs.
 
 ---
 
-## 1) Proposed Results Structure (6 sections, 4 main figures)
+## 1) Proposed Results Structure (7 sections, 4 main figures)
 
 ### R0. Motivation (no dedicated main figure; introduced with Fig1)
 - Core problem: current perturbation studies often mix **modality gap** (bulk vs scRNA-seq) with **mechanism gap** (drug vs gene).
@@ -31,6 +31,15 @@
 ### R5. Impact and implications (discussion-only, **no figure**)
 - Practical recommendations for virtual cell / perturbation prediction ecosystem.
 - Reporting standards and interpretation boundaries.
+
+### R6. Current empirical snapshot (2026-02-14 rerun)
+- Task1 matched pairs: full `670`, strict protocol subset `313` (`46.7%`), strict subset entirely `Genetic / exact_cond`.
+- Task1 global cosine: full gene/path `0.0238 / 0.0599`; strict gene/path `0.0060 / 0.0527`.
+- Task1 retrieval after balanced evaluation (fixed gallery=256, true=1) drops markedly for chemical groups:
+  - Chemical mean MRR (across tracks/directions): `0.598 -> 0.104`
+  - Chemical mean Top1 (across tracks/directions): `0.489 -> 0.062`
+- Task2 class composition remains: `Robust_High=567`, `Intermediate=1020`, `Robust_Low=1020`, `Protocol_Sensitive=454`.
+- Task3 remains direction/view-dependent with no universal best model.
 
 ---
 
@@ -70,6 +79,9 @@
 - **Fig2A (group-wise gap summary):**
   - Global mean cosine: gene `0.0238`, pathway `0.0599`
   - FDR-significant vs null for cosine metrics, but absolute concordance remains low.
+- **Fig2A2 (strict protocol subset contrast):**
+  - Strict subset (`n=313`): global mean cosine gene/path `0.0060 / 0.0527`
+  - Show full vs strict contrast to quantify protocol-mismatch effect.
 - **Fig2B (retrieval performance heatmap):**
   - Chemical `LINCS→sc` gene: MRR `0.9009`, Top1 `0.8599`
   - Genetic `LINCS→sc` gene: MRR `0.0941`, Top1 `0.0479`
@@ -77,6 +89,7 @@
 - **Fig2C (balanced retrieval control):**
   - Report balanced-candidate metrics (fixed gallery size + fixed positives per query).
   - Use `balanced_gallery_size=256` and `balanced_true_per_query=1` (default), with repeated subsampling.
+  - Highlight raw vs balanced drop (chemical mean MRR `0.598 -> 0.104`).
 - **Fig2D (context contribution / sample-structure explanation):**
   - Chemical average true-ratio in gallery: `0.2618` vs Genetic `0.0123`
   - Example contrast:
@@ -93,10 +106,12 @@
 
 ### Required data files
 - `outputs/task1/analysis/modality_gap_summary.csv`
+- `outputs/task1/analysis/strict/modality_gap_summary_strict.csv`
 - `outputs/task1/analysis/significance_results.csv`
 - `outputs/task1/retrieval/analysis/retrieval_summary.csv`
 - `outputs/task1/retrieval/analysis/retrieval_per_query.csv`
 - `outputs/task1/retrieval/analysis/retrieval_null_summary.csv`
+- `outputs/task1/qc/tables/qc_strict_subset_counts.csv`
 - `outputs/task1/confounder/analysis/factor_permutation_tests.csv`
 - `outputs/task1/confounder/analysis/variance_contribution_gap_gene.csv`
 - `outputs/task1/set_level_allctx/analysis/set_level_summary.csv`
@@ -226,7 +241,7 @@
 
 ---
 
-## 6) Risk Register and Mitigations (summary for reviewers)
+## 5) Risk Register and Mitigations (summary for reviewers)
 
 1. **Sparse chemical overlap (2 contexts).**  
    Mitigation: constrain claims to diagnostic conclusions; emphasize per-context reporting and avoid global chemical generalization.
@@ -247,7 +262,7 @@
 
 ---
 
-## 5) Immediate next actions (for co-author review round)
+## 6) Immediate next actions (for co-author review round)
 
 1. Confirm Fig1–Fig4 panel scope and ordering.
 2. Freeze S1–S8 with exact plotting scripts and style templates.
