@@ -6,6 +6,10 @@ This script extends existing Task2 outputs with an explicit target-tier layer:
 1) assign each target into confidence/polypharmacology tiers,
 2) summarize performance classes by tier,
 3) quantify enrichment with Fisher exact + BH-FDR correction.
+
+Important:
+- This module is a sensitivity analysis layer for interpretation robustness.
+- It should not be treated as the primary endpoint analysis.
 """
 
 from __future__ import annotations
@@ -33,6 +37,7 @@ class Task2TargetTierConfig:
     output_dir: str = "./outputs/task2_nodomain/target_tier"
     target_tier_map_path: str | None = None
     min_contexts_per_tier: int = 10
+    analysis_role: str = "sensitivity_analysis"
 
     @property
     def analysis_dir(self) -> str:
@@ -120,12 +125,20 @@ def _load_external_tier_map(path: str) -> pd.DataFrame:
     target_col = cols.get("target") or cols.get("target_std")
     conf_col = cols.get("confidence_tier")
     poly_col = cols.get("polypharm_tier")
+    ev_col = cols.get("evidence_source") or cols.get("annotation_source") or cols.get("evidence")
     if target_col is None or conf_col is None or poly_col is None:
         raise ValueError(
             "target_tier_map must contain columns: Target(or target_std), confidence_tier, polypharm_tier"
         )
-    out = df[[target_col, conf_col, poly_col]].copy()
-    out.columns = ["Target", "confidence_tier", "polypharm_tier"]
+    base_cols = [target_col, conf_col, poly_col]
+    if ev_col is not None:
+        base_cols.append(ev_col)
+    out = df[base_cols].copy()
+    if ev_col is not None:
+        out.columns = ["Target", "confidence_tier", "polypharm_tier", "evidence_source"]
+    else:
+        out.columns = ["Target", "confidence_tier", "polypharm_tier"]
+        out["evidence_source"] = "external_csv_unspecified"
     out["Target"] = out["Target"].map(_normalize_target)
     out["mapping_source"] = "external_csv"
     return out.drop_duplicates(subset=["Target"], keep="first")
@@ -149,6 +162,7 @@ def assign_target_tiers(ctx: pd.DataFrame, cfg: Task2TargetTierConfig) -> tuple[
                 "confidence_tier": conf,
                 "polypharm_tier": poly,
                 "mapping_source": reason,
+                "evidence_source": "heuristic_rule",
             }
         )
     mapping = pd.DataFrame(heur_rows)
@@ -157,7 +171,7 @@ def assign_target_tiers(ctx: pd.DataFrame, cfg: Task2TargetTierConfig) -> tuple[
     if ext_map is not None and not ext_map.empty:
         mapping = mapping.set_index("Target")
         ext_map = ext_map.set_index("Target")
-        mapping.update(ext_map[["confidence_tier", "polypharm_tier", "mapping_source"]])
+        mapping.update(ext_map[["confidence_tier", "polypharm_tier", "mapping_source", "evidence_source"]])
         mapping = mapping.reset_index()
 
     out = ctx.merge(mapping, left_on="Target_norm", right_on="Target", how="left")
@@ -231,6 +245,26 @@ def build_tier_enrichment(ctx_tier: pd.DataFrame, min_contexts: int) -> pd.DataF
     return out.sort_values(["Performance_Class", "fdr_bh", "p_value"])
 
 
+def build_mapping_qc(ctx_tier: pd.DataFrame, mapping: pd.DataFrame) -> pd.DataFrame:
+    row_cov = (
+        ctx_tier.groupby(["confidence_tier", "polypharm_tier", "mapping_source", "evidence_source"], as_index=False)
+        .agg(
+            n_context_rows=("Target", "size"),
+            n_unique_targets=("Target", "nunique"),
+        )
+        .sort_values(["n_context_rows"], ascending=False)
+    )
+    map_cov = (
+        mapping.groupby(["confidence_tier", "polypharm_tier", "mapping_source", "evidence_source"], as_index=False)
+        .agg(n_mapping_targets=("Target", "size"))
+    )
+    return row_cov.merge(
+        map_cov,
+        on=["confidence_tier", "polypharm_tier", "mapping_source", "evidence_source"],
+        how="left",
+    )
+
+
 # ---------------------------------------------------------------------
 # Section 4. Main
 # ---------------------------------------------------------------------
@@ -247,14 +281,19 @@ def run_task2_target_tier(cfg: Task2TargetTierConfig) -> None:
         raise ValueError(f"Context label table missing required columns: {missing}")
 
     ctx_tier, mapping = assign_target_tiers(ctx=ctx, cfg=cfg)
+    ctx_tier["analysis_role"] = cfg.analysis_role
     summary = build_tier_summary(ctx_tier=ctx_tier, min_contexts=cfg.min_contexts_per_tier)
+    summary["analysis_role"] = cfg.analysis_role
     enrich = build_tier_enrichment(ctx_tier=ctx_tier, min_contexts=cfg.min_contexts_per_tier)
+    enrich["analysis_role"] = cfg.analysis_role
+    mapping_qc = build_mapping_qc(ctx_tier=ctx_tier, mapping=mapping)
 
     out_dir = Path(cfg.analysis_dir)
     mapping.to_csv(out_dir / "task2_target_tier_map_used.csv", index=False)
     ctx_tier.to_csv(out_dir / "task2_context_with_target_tier.csv", index=False)
     summary.to_csv(out_dir / "task2_target_tier_summary.csv", index=False)
     enrich.to_csv(out_dir / "task2_target_tier_enrichment.csv", index=False)
+    mapping_qc.to_csv(out_dir / "task2_target_tier_mapping_qc.csv", index=False)
 
     key_summary = pd.DataFrame(
         [
@@ -263,6 +302,7 @@ def run_task2_target_tier(cfg: Task2TargetTierConfig) -> None:
             {"metric": "n_confidence_tiers", "value": int(ctx_tier["confidence_tier"].nunique())},
             {"metric": "n_polypharm_tiers", "value": int(ctx_tier["polypharm_tier"].nunique())},
             {"metric": "n_enrichment_tests", "value": int(len(enrich))},
+            {"metric": "n_mapping_qc_rows", "value": int(len(mapping_qc))},
         ]
     )
     key_summary.to_csv(out_dir / "task2_target_tier_key_summary.csv", index=False)
@@ -271,11 +311,13 @@ def run_task2_target_tier(cfg: Task2TargetTierConfig) -> None:
         "created_at": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
         "elapsed_seconds": float(time.time() - t0),
         "config": asdict(cfg),
+        "analysis_role": cfg.analysis_role,
         "summary": {
             "n_context_rows": int(len(ctx_tier)),
             "n_mapping_rows": int(len(mapping)),
             "n_summary_rows": int(len(summary)),
             "n_enrichment_rows": int(len(enrich)),
+            "n_mapping_qc_rows": int(len(mapping_qc)),
         },
     }
     Path(cfg.run_manifest_path).write_text(json.dumps(manifest, indent=2), encoding="utf-8")

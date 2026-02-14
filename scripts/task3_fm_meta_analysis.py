@@ -8,6 +8,9 @@ Relate model performance to two attributes requested for reviewer-facing analyse
 1) model size class,
 2) perturbation-trained vs non-perturbation-trained.
 
+This module is not a pure leaderboard. The aggregate score
+(`mean_scaled_best`) is explicitly defined and exported.
+
 Input
 -----
 Primary input is viz_scoreboard_long.csv from Task3 unified outputs.
@@ -170,6 +173,8 @@ def build_model_scoreboard(df: pd.DataFrame) -> pd.DataFrame:
         )
         .agg(
             n_metric_slices=("Metric", "size"),
+            n_metric_groups=("MetricGroup", "nunique"),
+            n_views=("View", "nunique"),
             mean_scaled_best=("Scaled_Best", "mean"),
             median_scaled_best=("Scaled_Best", "median"),
             mean_rank_best=("Rank_Best", "mean"),
@@ -178,6 +183,7 @@ def build_model_scoreboard(df: pd.DataFrame) -> pd.DataFrame:
         )
         .sort_values(["mean_scaled_best", "mean_rank_best"], ascending=[False, True])
     )
+    out["score_definition_id"] = "equal_weight_metric_slice_mean_scaled_best"
     return out
 
 
@@ -281,11 +287,23 @@ def run_task3_meta(cfg: Task3MetaConfig) -> None:
     perturb_tests = build_perturbation_training_tests(merged)
     size_tests = build_size_trend_tests(merged)
     size_summary = build_size_class_summary(merged)
+    score_def = pd.DataFrame(
+        [
+            {
+                "score_definition_id": "equal_weight_metric_slice_mean_scaled_best",
+                "score_name": "mean_scaled_best",
+                "formula": "mean(Scaled_Best) across all metric slices for each model",
+                "weighting": "equal weight per metric-slice row in scoreboard_long",
+                "interpretation_note": "Cross-slice aggregate for trend analysis; not a single-task primary endpoint.",
+            }
+        ]
+    )
 
     out = Path(cfg.analysis_dir)
     meta.to_csv(out / "task3_model_metadata_used.csv", index=False)
     merged.to_csv(out / "task3_model_metric_joined.csv", index=False)
     model_scoreboard.to_csv(out / "task3_model_scoreboard_meta.csv", index=False)
+    score_def.to_csv(out / "task3_mean_scaled_best_definition.csv", index=False)
     perturb_tests.to_csv(out / "task3_meta_perturbation_training_tests.csv", index=False)
     size_tests.to_csv(out / "task3_meta_size_trend_tests.csv", index=False)
     size_summary.to_csv(out / "task3_meta_size_class_summary.csv", index=False)
@@ -310,6 +328,7 @@ def run_task3_meta(cfg: Task3MetaConfig) -> None:
             "n_rows_joined": int(len(merged)),
             "n_perturb_tests": int(len(perturb_tests)),
             "n_size_tests": int(len(size_tests)),
+            "score_definition_id": "equal_weight_metric_slice_mean_scaled_best",
         },
     }
     Path(cfg.run_manifest_path).write_text(json.dumps(manifest, indent=2), encoding="utf-8")

@@ -7,9 +7,10 @@ and produces additional tables/figures required by reviewer-facing robustness ch
 
 1) Retrieval dual-report (raw + balanced) with theoretical/random baselines.
 2) Effect-size calibration (cross-modality vs within-modality replicate consistency).
-3) Protocol mismatch continuous sensitivity (dose/time vs cosine trend curves).
-4) Composition-bias sensitivity (cell-stratified + leave-one-cell-out summaries).
-5) Benchmarkability map (context comparability zones).
+3) Protocol mismatch continuous sensitivity (raw + deconfounded partial Spearman).
+4) LINCS internal consistency (same cell/target, same cell/target/dose/time).
+5) Composition-bias sensitivity (cell-stratified + leave-one-cell-out summaries).
+6) Benchmarkability map (context comparability zones).
 """
 
 from __future__ import annotations
@@ -25,7 +26,7 @@ from typing import Iterable
 import numpy as np
 import pandas as pd
 import torch
-from scipy.stats import spearmanr
+from scipy.stats import pearsonr, spearmanr
 
 
 # ---------------------------------------------------------------------
@@ -98,6 +99,21 @@ def _read_csv_or_parquet(path_like: str) -> pd.DataFrame:
     return pd.read_csv(path)
 
 
+def _read_unified_meta_minimal(path_like: str) -> pd.DataFrame:
+    """
+    Read only columns needed for LINCS internal consistency analysis.
+    """
+    path = Path(path_like)
+    need = ["source_db", "modality", "global_idx", "cell_std", "target_std", "dose_val", "time_val"]
+    if not path.exists():
+        raise FileNotFoundError(path)
+    if path.suffix.lower() == ".parquet":
+        return pd.read_parquet(path, columns=need)
+    if path.suffix.lower() == ".csv":
+        return pd.read_csv(path, usecols=lambda c: c in set(need))
+    return pd.read_csv(path, usecols=lambda c: c in set(need))
+
+
 def _harmonic_number(n: int) -> float:
     return float(np.sum(1.0 / np.arange(1, n + 1)))
 
@@ -142,6 +158,39 @@ def _sample_within_cosine_mean(
     return float(np.mean(cos)), int(len(cos))
 
 
+def _sample_within_cosine_stats(
+    emb: np.ndarray,
+    max_samples: int,
+    rng: np.random.Generator,
+) -> tuple[float, float, int]:
+    """
+    Estimate within-source pairwise cosine summary by random pair sampling.
+    Returns (mean, median, n_pairs_sampled).
+    """
+    n = int(emb.shape[0])
+    if n < 2:
+        return np.nan, np.nan, 0
+
+    sample_n = int(min(max_samples, n * (n - 1) // 2))
+    x = _normalize_rows(emb.astype(np.float32, copy=False))
+
+    i = rng.integers(0, n, size=sample_n * 3, endpoint=False)
+    j = rng.integers(0, n, size=sample_n * 3, endpoint=False)
+    mask = i != j
+    i = i[mask][:sample_n]
+    j = j[mask][:sample_n]
+    if len(i) < sample_n:
+        needed = sample_n - len(i)
+        ii = rng.integers(0, n, size=needed * 5, endpoint=False)
+        jj = rng.integers(0, n, size=needed * 5, endpoint=False)
+        mm = ii != jj
+        i = np.concatenate([i, ii[mm][:needed]])
+        j = np.concatenate([j, jj[mm][:needed]])
+
+    cos = np.sum(x[i] * x[j], axis=1)
+    return float(np.mean(cos)), float(np.median(cos)), int(len(cos))
+
+
 def _cross_cosine_mean(a: np.ndarray, b: np.ndarray) -> tuple[float, int]:
     if len(a) == 0 or len(b) == 0:
         return np.nan, 0
@@ -166,6 +215,52 @@ def _quantile_bins(series: pd.Series, n_bins: int) -> pd.Series:
         return pd.Series([np.nan] * len(series), index=series.index, dtype="object")
     bins = int(min(n_bins, valid.nunique()))
     return pd.qcut(values, q=bins, duplicates="drop")
+
+
+def _linear_residual(y: np.ndarray, x_design: np.ndarray) -> np.ndarray:
+    beta, *_ = np.linalg.lstsq(x_design, y, rcond=None)
+    return y - x_design @ beta
+
+
+def _partial_spearman(
+    df: pd.DataFrame,
+    x_col: str,
+    y_col: str,
+    covariate_numeric: list[str] | None = None,
+    covariate_categorical: list[str] | None = None,
+) -> dict:
+    covariate_numeric = covariate_numeric or []
+    covariate_categorical = covariate_categorical or []
+    use_cols = [x_col, y_col] + covariate_numeric + covariate_categorical
+    sub = df[use_cols].replace([np.inf, -np.inf], np.nan).dropna().copy()
+    if len(sub) < 6:
+        return {"n_pairs": int(len(sub)), "rho_partial": np.nan, "p_value_partial": np.nan}
+
+    x_rank = sub[x_col].rank(method="average").to_numpy(dtype=float)
+    y_rank = sub[y_col].rank(method="average").to_numpy(dtype=float)
+
+    x_parts = [np.ones((len(sub), 1), dtype=float)]
+    for c in covariate_numeric:
+        v = pd.to_numeric(sub[c], errors="coerce").to_numpy(dtype=float)
+        if np.isfinite(v).all() and np.nanstd(v) > 1e-12:
+            vv = (v - np.nanmean(v)) / (np.nanstd(v) + 1e-12)
+            x_parts.append(vv.reshape(-1, 1))
+    if covariate_categorical:
+        dummies = pd.get_dummies(sub[covariate_categorical].astype(str), drop_first=True, dtype=float)
+        if not dummies.empty:
+            x_parts.append(dummies.to_numpy(dtype=float))
+
+    design = np.hstack(x_parts)
+    if design.shape[1] <= 1:
+        rho, pval = spearmanr(sub[x_col].to_numpy(dtype=float), sub[y_col].to_numpy(dtype=float))
+        return {"n_pairs": int(len(sub)), "rho_partial": float(rho), "p_value_partial": float(pval)}
+
+    x_res = _linear_residual(x_rank, design)
+    y_res = _linear_residual(y_rank, design)
+    if np.std(x_res) < 1e-12 or np.std(y_res) < 1e-12:
+        return {"n_pairs": int(len(sub)), "rho_partial": np.nan, "p_value_partial": np.nan}
+    rho, pval = pearsonr(x_res, y_res)
+    return {"n_pairs": int(len(sub)), "rho_partial": float(rho), "p_value_partial": float(pval)}
 
 
 def _fetch_embeddings_for_candidates(
@@ -391,7 +486,7 @@ def build_protocol_continuous_sensitivity(
     per_pair: pd.DataFrame,
     cfg: Task1ReviewerAddonsConfig,
     out_dir: Path,
-) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     chem = per_pair[per_pair["modality"] == "Chemical"].copy()
     chem["dose_logdiff"] = pd.to_numeric(chem["dose_logdiff"], errors="coerce")
     chem["time_absdiff"] = pd.to_numeric(chem["time_absdiff"], errors="coerce")
@@ -416,6 +511,36 @@ def build_protocol_continuous_sensitivity(
                 )
     tests = pd.DataFrame(test_rows)
     tests.to_csv(out_dir / "protocol_continuous_spearman.csv", index=False)
+
+    # Partial Spearman (deconfounded by cell/target; optionally plus other mismatch axis)
+    partial_rows: list[dict] = []
+    for x_col in ["dose_logdiff", "time_absdiff"]:
+        for y_col in ["cosine_gene", "cosine_path"]:
+            other = "time_absdiff" if x_col == "dose_logdiff" else "dose_logdiff"
+            specs = [
+                ("cell_target", []),
+                ("cell_target_plus_other_mismatch", [other]),
+            ]
+            for control_spec, cov_num in specs:
+                res = _partial_spearman(
+                    df=chem,
+                    x_col=x_col,
+                    y_col=y_col,
+                    covariate_numeric=cov_num,
+                    covariate_categorical=["cell_std", "target_std"],
+                )
+                partial_rows.append(
+                    {
+                        "x_var": x_col,
+                        "y_var": y_col,
+                        "control_spec": control_spec,
+                        "n_pairs": int(res["n_pairs"]),
+                        "partial_spearman_rho": res["rho_partial"],
+                        "p_value": res["p_value_partial"],
+                    }
+                )
+    partial = pd.DataFrame(partial_rows)
+    partial.to_csv(out_dir / "protocol_continuous_partial_spearman.csv", index=False)
 
     # 1D quantile-bin trend curves
     curve_rows: list[dict] = []
@@ -486,7 +611,128 @@ def build_protocol_continuous_sensitivity(
             plt.close(fig)
     except Exception:
         pass
-    return tests, curves, heat
+    return tests, partial, curves, heat
+
+
+def build_lincs_internal_consistency(
+    unified_meta: pd.DataFrame,
+    cfg: Task1ReviewerAddonsConfig,
+    out_dir: Path,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """
+    Internal LINCS consistency over the full LINCS chemical pool:
+      - same (cell, target)
+      - same (cell, target, dose, time)
+    """
+    rng = np.random.default_rng(cfg.random_seed)
+    meta = unified_meta.copy()
+    meta["global_idx"] = pd.to_numeric(meta["global_idx"], errors="coerce")
+    meta = meta[
+        (meta["source_db"] == "LINCS")
+        & (meta["modality"] == "Chemical")
+        & meta["global_idx"].notna()
+    ].copy()
+    meta["global_idx"] = meta["global_idx"].astype(int)
+    meta = meta.dropna(subset=["cell_std", "target_std", "dose_val", "time_val"])
+    meta = meta.reset_index(drop=True)
+
+    lincs_data = torch.load(cfg.lincs_data_path, map_location="cpu")
+    idx = torch.as_tensor(meta["global_idx"].to_numpy(dtype=int), dtype=torch.long)
+    y_gene = lincs_data["y_delta_gene"].index_select(0, idx).detach().cpu().numpy().astype(np.float32)
+    y_path = lincs_data["y_delta_pathway"].index_select(0, idx).detach().cpu().numpy().astype(np.float32)
+    meta["embed_idx"] = np.arange(len(meta), dtype=np.int64)
+
+    def _compute(group_cols: list[str], level_name: str) -> pd.DataFrame:
+        rows: list[dict] = []
+        for keys, grp in meta.groupby(group_cols, sort=False):
+            emb_idx = grp["embed_idx"].to_numpy(dtype=int)
+            n_rows = int(len(emb_idx))
+            if n_rows < 2:
+                continue
+            g_mean, g_median, g_n = _sample_within_cosine_stats(
+                y_gene[emb_idx], max_samples=cfg.max_within_pair_samples_per_context, rng=rng
+            )
+            p_mean, p_median, p_n = _sample_within_cosine_stats(
+                y_path[emb_idx], max_samples=cfg.max_within_pair_samples_per_context, rng=rng
+            )
+            row = {
+                "level": level_name,
+                "n_rows": n_rows,
+                "n_pairs_sampled_gene": int(g_n),
+                "n_pairs_sampled_path": int(p_n),
+                "cosine_gene_mean": g_mean,
+                "cosine_gene_median_sample": g_median,
+                "cosine_path_mean": p_mean,
+                "cosine_path_median_sample": p_median,
+            }
+            if isinstance(keys, tuple):
+                for k, v in zip(group_cols, keys):
+                    row[k] = v
+            else:
+                row[group_cols[0]] = keys
+            rows.append(row)
+        out = pd.DataFrame(rows)
+        ordered = (
+            ["level"]
+            + group_cols
+            + [
+                "n_rows",
+                "n_pairs_sampled_gene",
+                "n_pairs_sampled_path",
+                "cosine_gene_mean",
+                "cosine_gene_median_sample",
+                "cosine_path_mean",
+                "cosine_path_median_sample",
+            ]
+        )
+        if out.empty:
+            return pd.DataFrame(columns=ordered)
+        return out[ordered]
+
+    by_cell_target = _compute(["cell_std", "target_std"], "cell_target")
+    by_cell_target_dt = _compute(["cell_std", "target_std", "dose_val", "time_val"], "cell_target_dose_time")
+    by_cell_target.to_csv(out_dir / "lincs_internal_consistency_cell_target.csv", index=False)
+    by_cell_target_dt.to_csv(out_dir / "lincs_internal_consistency_cell_target_dose_time.csv", index=False)
+
+    def _summary_row(name: str, df: pd.DataFrame) -> dict:
+        if df.empty:
+            return {
+                "name": name,
+                "n_groups": 0,
+                "n_rows_total": 0,
+                "n_pairs_sampled_total": 0,
+                "weighted_cosine_gene": np.nan,
+                "weighted_cosine_path": np.nan,
+                "median_cosine_gene": np.nan,
+                "median_cosine_path": np.nan,
+                "q25_gene": np.nan,
+                "q75_gene": np.nan,
+                "q25_path": np.nan,
+                "q75_path": np.nan,
+            }
+        return {
+            "name": name,
+            "n_groups": int(len(df)),
+            "n_rows_total": int(df["n_rows"].sum()),
+            "n_pairs_sampled_total": int(df["n_pairs_sampled_gene"].sum()),
+            "weighted_cosine_gene": _weighted_mean(df, "cosine_gene_mean", "n_pairs_sampled_gene"),
+            "weighted_cosine_path": _weighted_mean(df, "cosine_path_mean", "n_pairs_sampled_path"),
+            "median_cosine_gene": float(df["cosine_gene_mean"].median()),
+            "median_cosine_path": float(df["cosine_path_mean"].median()),
+            "q25_gene": float(df["cosine_gene_mean"].quantile(0.25)),
+            "q75_gene": float(df["cosine_gene_mean"].quantile(0.75)),
+            "q25_path": float(df["cosine_path_mean"].quantile(0.25)),
+            "q75_path": float(df["cosine_path_mean"].quantile(0.75)),
+        }
+
+    summary = pd.DataFrame(
+        [
+            _summary_row("same_cell_target", by_cell_target),
+            _summary_row("same_cell_target_dose_time", by_cell_target_dt),
+        ]
+    )
+    summary.to_csv(out_dir / "lincs_internal_consistency_summary.csv", index=False)
+    return by_cell_target, by_cell_target_dt, summary
 
 
 def build_cell_bias_sensitivity(
@@ -564,6 +810,20 @@ def build_cell_bias_sensitivity(
     return cell_pair, loo_pair, cell_ret, loo_ret
 
 
+def build_strict_subset_composition(per_pair: pd.DataFrame, out_dir: Path) -> pd.DataFrame:
+    df = per_pair.copy()
+    df["is_strict_protocol_pair"] = df["is_strict_protocol_pair"].fillna(False).astype(bool)
+    summary = (
+        df.groupby(["modality", "is_strict_protocol_pair"], as_index=False)
+        .agg(n_pairs=("pair_id_task1", "size"))
+        .sort_values(["is_strict_protocol_pair", "modality"])
+    )
+    totals = summary.groupby("is_strict_protocol_pair")["n_pairs"].transform("sum")
+    summary["fraction_within_strict_flag"] = summary["n_pairs"] / totals
+    summary.to_csv(out_dir / "strict_subset_composition.csv", index=False)
+    return summary
+
+
 def build_benchmarkability_map(
     context_overlap: pd.DataFrame,
     per_pair: pd.DataFrame,
@@ -622,10 +882,10 @@ def build_benchmarkability_map(
 def run_task1_reviewer_addons(cfg: Task1ReviewerAddonsConfig) -> None:
     t0 = time.time()
     _ensure_dirs([cfg.output_dir, cfg.analysis_dir, cfg.qc_dir])
-    rng = np.random.default_rng(cfg.random_seed)
 
     # Load inputs
     candidates = _read_csv_or_parquet(cfg.m1_candidates_path)
+    unified_meta = _read_unified_meta_minimal(cfg.task0_unified_meta_path)
     per_pair = _read_csv_or_parquet(cfg.per_pair_path)
     retrieval_summary = _read_csv_or_parquet(cfg.retrieval_summary_path)
     retrieval_null = _read_csv_or_parquet(cfg.retrieval_null_path)
@@ -656,8 +916,15 @@ def run_task1_reviewer_addons(cfg: Task1ReviewerAddonsConfig) -> None:
     )
 
     # Protocol continuous sensitivity
-    tests, curves, heat = build_protocol_continuous_sensitivity(
+    tests, partial_tests, curves, heat = build_protocol_continuous_sensitivity(
         per_pair=per_pair,
+        cfg=cfg,
+        out_dir=Path(cfg.analysis_dir),
+    )
+
+    # LINCS internal consistency (within-bulk repeatability sanity)
+    lincs_ctx, lincs_ctx_dt, lincs_summary = build_lincs_internal_consistency(
+        unified_meta=unified_meta,
         cfg=cfg,
         out_dir=Path(cfg.analysis_dir),
     )
@@ -668,6 +935,9 @@ def run_task1_reviewer_addons(cfg: Task1ReviewerAddonsConfig) -> None:
         retrieval_per_query=retrieval_per_query,
         out_dir=Path(cfg.analysis_dir),
     )
+
+    # Strict-subset composition (for explicit denominator/caveat reporting)
+    strict_comp = build_strict_subset_composition(per_pair=per_pair, out_dir=Path(cfg.analysis_dir))
 
     # Benchmarkability map
     map_df, map_summary = build_benchmarkability_map(
@@ -684,7 +954,11 @@ def run_task1_reviewer_addons(cfg: Task1ReviewerAddonsConfig) -> None:
             {"metric": "n_retrieval_groups", "value": int(len(retrieval_dual))},
             {"metric": "n_calibration_context_rows", "value": int(len(ctx_calib))},
             {"metric": "n_protocol_spearman_tests", "value": int(len(tests))},
+            {"metric": "n_protocol_partial_tests", "value": int(len(partial_tests))},
+            {"metric": "n_lincs_internal_cell_target_rows", "value": int(len(lincs_ctx))},
+            {"metric": "n_lincs_internal_cell_target_dose_time_rows", "value": int(len(lincs_ctx_dt))},
             {"metric": "n_benchmarkability_contexts", "value": int(len(map_df))},
+            {"metric": "n_strict_subset_comp_rows", "value": int(len(strict_comp))},
             {"metric": "n_leave_one_cell_out_pair_rows", "value": int(len(loo_pair))},
             {"metric": "n_leave_one_cell_out_retrieval_rows", "value": int(len(loo_ret))},
         ]
@@ -699,6 +973,8 @@ def run_task1_reviewer_addons(cfg: Task1ReviewerAddonsConfig) -> None:
             "retrieval_groups": int(len(retrieval_dual)),
             "calibration_rows": int(len(ctx_calib)),
             "protocol_tests": int(len(tests)),
+            "protocol_partial_tests": int(len(partial_tests)),
+            "lincs_internal_summary_rows": int(len(lincs_summary)),
             "cell_pair_rows": int(len(cell_pair)),
             "map_context_rows": int(len(map_df)),
         },
