@@ -1,6 +1,6 @@
 # M2M-Bench Manuscript Proposal (Draft for Co-author Review)
 
-**Version:** v0.5 (2026-02-14)  
+**Version:** v0.6 (2026-02-14)  
 **Project:** M2M-Bench (*From Modality Concordance to Mechanism Fidelity*)  
 **Goal:** finalize a reviewer-robust Results/Methods figure map with locked units, endpoints, and reproducibility outputs.
 
@@ -16,13 +16,14 @@
 ### 1.2 Analysis units and denominators
 - **Task1 `row`:** one perturbation profile in unified metadata.
 - **Task1 `context`:** `(cell_std, modality, target_std)`.
+- **Task1 `meta_context` (for overlap reporting):** `(cell_std, target_std)` (modality removed for denominator clarity).
 - **Task1 `matched_pair`:** one LINCS row matched to one scPerturb row within a context.
 - **Task1 `query`:** one retrieval query row against opposite-source gallery.
 - **Task2 `instance`:** one row in `Step1_L1_Instance_Tidy_NoDomain.csv` keyed by `(Track, Scenario, View, Direction, Cell, Target, Source_Chem, Source_Gene, Dose, Time, CondID)`.
 - **Task2 `context` (Step1):** `(Track, View, Cell, Target, Source_Chem, Source_Gene)` aggregated row.
 - **Task2 `labeled_context` (Step2):** `(Cell, Target)` with class label.
 - **Task2 `class`:** `{Robust_High, Intermediate, Robust_Low, Protocol_Sensitive}`.
-- **Current denominators:** Task1 overlap contexts `84`, matched pairs `670`; Task2 Step1 contexts `9852`; Task2 labeled contexts `3061`.
+- **Current denominators:** Task1 overlap contexts (`context` key) `84`, meta-context with any overlap `84`, matched pairs `670`; Task2 Step1 contexts `9852`; Task2 labeled contexts `3061`.
 
 ### 1.3 Primary endpoints (submission lock)
 - **Task1 primary endpoints:**
@@ -74,12 +75,14 @@
 - **Fig1D:** drop reasons (`cell_and_target_absent_in_other_source`, `target_not_shared_in_other_source`).
 - **Fig1E:** protocol mismatch diagnostics (chemical nearest matching vs genetic exact matching).
 - **Fig1F:** benchmarkability map (`Z0`, `Z1`, `Z3` zones).
+- **Fig1G:** context-definition audit (`context` vs `meta_context`) to avoid denominator ambiguity.
 
 ### Required files
 - `outputs/task1_audit/analysis/stage_summary.csv`
 - `outputs/task1_audit/analysis/context_drop_reasons_summary.csv`
 - `outputs/task1_audit/analysis/protocol_gap_summary.csv`
 - `outputs/task1_reviewer_fixes/analysis/benchmarkability_zone_summary.csv`
+- `outputs/task1_reviewer_fixes/analysis/task1_context_definition_comparison.csv`
 
 ---
 
@@ -92,9 +95,12 @@
 - **Fig2B (Retrieval fairness):**
   - raw vs balanced vs random baseline (`Top1_random=1/256`, `MRR_random≈0.0239`).
   - Chemical mean MRR `0.598 -> 0.104` after balancing.
+  - Add gallery-size sensitivity (`64/128/256`; seed replication) in supplement.
 - **Fig2C (Protocol sensitivity, deconfounded):**
   - continuous mismatch curves + partial Spearman controlling for `cell_std` and `target_std`.
-  - Example (gene): `time_absdiff` partial rho `-0.312` (p `1.7e-9`), `dose_logdiff` partial rho `+0.151` (p `0.0043`).
+  - Example (gene):
+    - control=`cell+target`: `time_absdiff` rho `-0.312` (p `1.7e-9`), `dose_logdiff` rho `+0.151` (p `0.0043`);
+    - control=`cell+target+other mismatch+match_score`: effects attenuate (`time` rho `-0.036`, `dose` rho `-0.062`; both non-significant), indicating strong covariate collinearity with matching quality.
 - **Fig2D (Composition bias):**
   - ALL vs leave-HEPG2 sensitivity:
     - ALL gene/path `0.0238/0.0599`
@@ -118,6 +124,7 @@
 - `outputs/task1_reviewer_fixes/analysis/leave_one_cell_out_pairwise.csv`
 - `outputs/task1_reviewer_fixes/analysis/strict_subset_composition.csv`
 - `outputs/task1_reviewer_fixes/analysis/lincs_internal_consistency_summary.csv`
+- `outputs/task1_reviewer_fixes/retrieval_sensitivity/analysis/retrieval_sensitivity_summary.csv`
 
 ---
 
@@ -175,6 +182,7 @@
 ### S4 (Task1 robustness)
 - strict subset caveat table (`strict_subset_composition.csv`),
 - continuous + partial Spearman protocol analysis,
+- balanced retrieval sensitivity (`gallery=64/128/256/512`, seed repeats),
 - leave-one-cell-out results,
 - LINCS internal consistency:
   - same `(cell,target)` weighted cosine gene/path: `0.124 / 0.157`,
@@ -188,13 +196,19 @@
 ## 5) Current empirical snapshot (2026-02-14 rerun)
 
 - **Task1:** matched pairs `670`; strict `313` and strict composition is `100% Genetic`.
+- **Task1 context-definition audit:** `108,713` context-rows (`cell,modality,target`) collapse to `105,628` meta-contexts (`cell,target`); overlap remains sparse (`84` meta-contexts with any overlap: chemical `2`, genetic `82`, both-modalities `0`).
 - **Task1 pairwise cosine:** full gene/path `0.0238 / 0.0599`.
 - **Task1 retrieval (chemical):** MRR `0.598 -> 0.104` (raw→balanced), Top1 `0.489 -> 0.062`.
+- **Task1 retrieval sensitivity (balanced true=1):**
+  - chemical mean MRR over `gallery=64/128/256` is `0.186 / 0.138 / 0.104` (monotonic decrease),
+  - genetic mean MRR over `gallery=64/128/256` is `0.088 / 0.054 / 0.032` (monotonic decrease),
+  - `gallery=512` has low valid-query coverage in some groups and is reported as sensitivity-only.
 - **Task1 protocol deconfounding (chemical):**
-  - partial rho(`time_absdiff`, `cosine_gene`) `-0.312` (p `1.7e-9`),
-  - partial rho(`dose_logdiff`, `cosine_gene`) `+0.151` (p `0.0043`).
+  - control=`cell+target`: partial rho(`time_absdiff`, `cosine_gene`) `-0.312` (p `1.7e-9`), rho(`dose_logdiff`, `cosine_gene`) `+0.151` (p `0.0043`);
+  - adding `match_score` + other mismatch strongly attenuates both effects (near zero, non-significant).
 - **Task2 class counts (N=3061):** `Robust_High=567`, `Intermediate=1020`, `Robust_Low=1020`, `Protocol_Sensitive=454`.
 - **Task3 meta:** top `mean_scaled_best` model is `scGPT (0.684)`, then `PCA200 (0.647)`; no robust universal perturbation-trained advantage (best p≈`0.058`).
+- **Project alignment audit:** `7/7` checks PASS (`outputs/project_alignment_audit/analysis/project_alignment_checks.csv`).
 
 ---
 
@@ -216,14 +230,14 @@ Outputs from `scripts/build_reproducibility_pack.py`:
 - `outputs/reproducibility/analysis/repro_one_command_paths.md`
 
 Current status:
-- manifest coverage: `8/8` found,
-- seed entries extracted: `4`.
+- manifest coverage: `10/10` found,
+- seed entries extracted: `6` (includes retrieval sensitivity + project alignment audit manifests).
 
 ---
 
 ## 8) Immediate next actions
 
-1. Freeze Fig2 main 4-panel design and move remaining Task1 diagnostics to supplement.
+1. Freeze Fig2 main 4-panel design and keep retrieval-sensitivity/context-definition audits in supplement.
 2. Replace heuristic Task2 target-tier map with curated external annotations if available.
-3. Draft Results text with locked units/denominators and explicit non-claims.
-4. Prepare co-author review with reproducibility pack attached.
+3. Write Methods text for `context` vs `meta_context` and protocol deconfounding control hierarchy.
+4. Keep project alignment audit in every major iteration to prevent drift.

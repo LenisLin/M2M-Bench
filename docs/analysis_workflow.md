@@ -193,6 +193,8 @@ Main outputs:
 - `outputs/task1_reviewer_fixes/analysis/benchmarkability_zone_summary.csv`
 - `outputs/task1_reviewer_fixes/analysis/strict_subset_composition.csv`
 - `outputs/task1_reviewer_fixes/analysis/lincs_internal_consistency_summary.csv`
+- `outputs/task1_reviewer_fixes/analysis/task1_context_definition_comparison.csv`
+- `outputs/task1_reviewer_fixes/analysis/task1_metacontext_map.csv`
 
 ---
 
@@ -246,6 +248,42 @@ Main outputs:
 - `outputs/reproducibility/analysis/repro_seed_registry.csv`
 - `outputs/reproducibility/analysis/repro_environment.json`
 - `outputs/reproducibility/analysis/repro_one_command_paths.md`
+
+---
+
+## 13) Task1 retrieval sensitivity (recommended for reviewer robustness)
+
+Purpose: test balanced retrieval stability across gallery sizes and seeds.
+
+```bash
+python scripts/task1_retrieval_sensitivity.py \
+  --m1-candidates-path ./outputs/task1/data/m1_candidates.csv \
+  --processed-dir /mnt/NAS_21T/ProjectData/OSMOSIS/processed \
+  --output-dir ./outputs/task1_reviewer_fixes/retrieval_sensitivity \
+  --gallery-sizes 64,128,256,512 \
+  --seeds 42,43
+```
+
+Main outputs:
+- `outputs/task1_reviewer_fixes/retrieval_sensitivity/analysis/retrieval_sensitivity_long.csv`
+- `outputs/task1_reviewer_fixes/retrieval_sensitivity/analysis/retrieval_sensitivity_summary.csv`
+- `outputs/task1_reviewer_fixes/retrieval_sensitivity/analysis/retrieval_sensitivity_modality_compact.csv`
+
+---
+
+## 14) Project alignment audit (recommended after major iteration)
+
+Purpose: ensure manuscript-facing core claims remain aligned with generated outputs.
+
+```bash
+python scripts/project_alignment_audit.py \
+  --output-dir ./outputs/project_alignment_audit
+```
+
+Main outputs:
+- `outputs/project_alignment_audit/analysis/project_alignment_checks.csv`
+- `outputs/project_alignment_audit/analysis/project_alignment_summary.csv`
+- `outputs/project_alignment_audit/analysis/project_alignment_report.md`
 
 ---
 
