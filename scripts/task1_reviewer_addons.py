@@ -10,7 +10,8 @@ and produces additional tables/figures required by reviewer-facing robustness ch
 3) Protocol mismatch continuous sensitivity (raw + deconfounded partial Spearman).
 4) LINCS internal consistency (same cell/target, same cell/target/dose/time).
 5) Composition-bias sensitivity (cell-stratified + leave-one-cell-out summaries).
-6) Benchmarkability map (context comparability zones).
+6) Context-definition audit (context vs meta-context overlap accounting).
+7) Benchmarkability map (context comparability zones).
 """
 
 from __future__ import annotations
@@ -512,7 +513,7 @@ def build_protocol_continuous_sensitivity(
     tests = pd.DataFrame(test_rows)
     tests.to_csv(out_dir / "protocol_continuous_spearman.csv", index=False)
 
-    # Partial Spearman (deconfounded by cell/target; optionally plus other mismatch axis)
+    # Partial Spearman (deconfounded by cell/target; optional other mismatch + match score)
     partial_rows: list[dict] = []
     for x_col in ["dose_logdiff", "time_absdiff"]:
         for y_col in ["cosine_gene", "cosine_path"]:
@@ -520,6 +521,8 @@ def build_protocol_continuous_sensitivity(
             specs = [
                 ("cell_target", []),
                 ("cell_target_plus_other_mismatch", [other]),
+                ("cell_target_plus_match_score", ["match_score"]),
+                ("cell_target_plus_other_mismatch_plus_match_score", [other, "match_score"]),
             ]
             for control_spec, cov_num in specs:
                 res = _partial_spearman(
@@ -824,6 +827,58 @@ def build_strict_subset_composition(per_pair: pd.DataFrame, out_dir: Path) -> pd
     return summary
 
 
+def build_context_definition_audit(context_overlap: pd.DataFrame, out_dir: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Compare Task1 context (cell, modality, target) vs meta-context (cell, target)
+    to avoid ambiguity in overlap reporting.
+    """
+    ctx = context_overlap.copy()
+    ctx["LINCS"] = pd.to_numeric(ctx["LINCS"], errors="coerce").fillna(0).astype(int)
+    ctx["scPerturb"] = pd.to_numeric(ctx["scPerturb"], errors="coerce").fillna(0).astype(int)
+    ctx["is_overlap_context"] = ctx["is_overlap_context"].fillna(False).astype(bool)
+    ctx["has_rows_any"] = (ctx["LINCS"] > 0) | (ctx["scPerturb"] > 0)
+    ctx["meta_context_key"] = ctx["cell_std"].astype(str) + "||" + ctx["target_std"].astype(str)
+
+    meta_rows: list[dict] = []
+    for mkey, grp in ctx.groupby("meta_context_key", sort=False):
+        overlap_mods = sorted(grp.loc[grp["is_overlap_context"], "modality"].astype(str).unique().tolist())
+        present_mods = sorted(grp.loc[grp["has_rows_any"], "modality"].astype(str).unique().tolist())
+        meta_rows.append(
+            {
+                "meta_context_key": mkey,
+                "cell_std": str(grp["cell_std"].iloc[0]),
+                "target_std": str(grp["target_std"].iloc[0]),
+                "n_modalities_present": int(len(present_mods)),
+                "n_overlap_modalities": int(len(overlap_mods)),
+                "has_any_overlap": bool(len(overlap_mods) > 0),
+                "has_overlap_chemical": bool("Chemical" in overlap_mods),
+                "has_overlap_genetic": bool("Genetic" in overlap_mods),
+                "overlap_modalities": ";".join(overlap_mods) if overlap_mods else "",
+                "present_modalities": ";".join(present_mods) if present_mods else "",
+            }
+        )
+
+    meta = pd.DataFrame(meta_rows)
+    meta.to_csv(out_dir / "task1_metacontext_map.csv", index=False)
+
+    summary = pd.DataFrame(
+        [
+            {"metric": "n_context_rows_task1_key", "value": int(len(ctx))},
+            {"metric": "n_overlap_context_rows_task1_key", "value": int(ctx["is_overlap_context"].sum())},
+            {"metric": "n_meta_context_rows", "value": int(len(meta))},
+            {"metric": "n_meta_context_any_overlap", "value": int(meta["has_any_overlap"].sum())},
+            {"metric": "n_meta_context_overlap_chemical", "value": int(meta["has_overlap_chemical"].sum())},
+            {"metric": "n_meta_context_overlap_genetic", "value": int(meta["has_overlap_genetic"].sum())},
+            {
+                "metric": "n_meta_context_overlap_both_modalities",
+                "value": int((meta["has_overlap_chemical"] & meta["has_overlap_genetic"]).sum()),
+            },
+        ]
+    )
+    summary.to_csv(out_dir / "task1_context_definition_comparison.csv", index=False)
+    return meta, summary
+
+
 def build_benchmarkability_map(
     context_overlap: pd.DataFrame,
     per_pair: pd.DataFrame,
@@ -939,6 +994,12 @@ def run_task1_reviewer_addons(cfg: Task1ReviewerAddonsConfig) -> None:
     # Strict-subset composition (for explicit denominator/caveat reporting)
     strict_comp = build_strict_subset_composition(per_pair=per_pair, out_dir=Path(cfg.analysis_dir))
 
+    # Context-definition audit (context vs meta-context for overlap semantics)
+    meta_ctx, meta_ctx_summary = build_context_definition_audit(
+        context_overlap=context_overlap,
+        out_dir=Path(cfg.analysis_dir),
+    )
+
     # Benchmarkability map
     map_df, map_summary = build_benchmarkability_map(
         context_overlap=context_overlap,
@@ -959,6 +1020,8 @@ def run_task1_reviewer_addons(cfg: Task1ReviewerAddonsConfig) -> None:
             {"metric": "n_lincs_internal_cell_target_dose_time_rows", "value": int(len(lincs_ctx_dt))},
             {"metric": "n_benchmarkability_contexts", "value": int(len(map_df))},
             {"metric": "n_strict_subset_comp_rows", "value": int(len(strict_comp))},
+            {"metric": "n_metacontext_rows", "value": int(len(meta_ctx))},
+            {"metric": "n_metacontext_summary_rows", "value": int(len(meta_ctx_summary))},
             {"metric": "n_leave_one_cell_out_pair_rows", "value": int(len(loo_pair))},
             {"metric": "n_leave_one_cell_out_retrieval_rows", "value": int(len(loo_ret))},
         ]
@@ -975,6 +1038,7 @@ def run_task1_reviewer_addons(cfg: Task1ReviewerAddonsConfig) -> None:
             "protocol_tests": int(len(tests)),
             "protocol_partial_tests": int(len(partial_tests)),
             "lincs_internal_summary_rows": int(len(lincs_summary)),
+            "metacontext_rows": int(len(meta_ctx)),
             "cell_pair_rows": int(len(cell_pair)),
             "map_context_rows": int(len(map_df)),
         },
