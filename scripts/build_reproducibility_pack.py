@@ -44,10 +44,12 @@ DEFAULT_MANIFEST_PATHS = [
     "./outputs/task1/run_manifest_task1_pipeline.json",
     "./outputs/task1_audit/run_manifest_task01_attrition.json",
     "./outputs/task1_reviewer_fixes/run_manifest_task1_reviewer_addons.json",
+    "./outputs/task1_reviewer_fixes/retrieval_sensitivity/run_manifest_task1_retrieval_sensitivity.json",
     "./outputs/task2_nodomain/run_manifest_task2_nodomain.json",
     "./outputs/task2_nodomain/target_tier/run_manifest_task2_target_tier.json",
     "./outputs/task3_audit/run_manifest_task3_audit.json",
     "./outputs/task3_meta/run_manifest_task3_meta.json",
+    "./outputs/project_alignment_audit/run_manifest_project_alignment_audit.json",
 ]
 
 
