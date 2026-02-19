@@ -37,6 +37,7 @@ Gates (risk-tiered):
 - Tier-1 (medium risk): interface/schema/dependency/multi-module → update docs/specs first, then code.
 - Tier-2 (high risk): new algorithm/metric/statistical claim/biomed interpretation → write math/spec + decision log + pseudo-code + MRE; code only after locked.
 
-If the task touches Bridge / Git / SemVer / Changelog:
+If the task touches Bridge / Git / SemVer / Changelog / Scripts:
 - Consult `docs/avcp_guidelines.md` first.
 - Explicitly state: "Consulted: docs/avcp_guidelines.md#<Section>" in your reply.
+- For script creation/modification, enforce `docs/avcp_guidelines.md#4.1 Script Header Contract`.

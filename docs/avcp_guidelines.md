@@ -24,6 +24,33 @@ Preferred:
 - Use `scripts/dev/update_changelog.py` to insert under `## Unreleased`.
 - `update_changelog.py` is the canonical way to add entries without breaking markdown structure or duplicating bullets.
 
+## 4.1 Script Header Contract
+All new or modified executable scripts under `scripts/` must include this header block at the top of file-level comments.
+
+```text
+# SCRIPT_HEADER_CONTRACT
+# Script: <repo-relative-path>
+# Purpose: <one-line objective>
+# Inputs:
+#   - <name>: <source/path/type>
+# Outputs:
+#   - <artifact>: <path/format>
+# Side Effects:
+#   - <created/modified paths>
+# Config Dependencies:
+#   - config/config.yaml::<key.path>
+# Execution:
+#   - python <script> [args]
+# Failure Modes:
+#   - <condition> -> <behavior/exit code>
+# Last Updated: <YYYY-MM-DD>
+```
+
+Rules:
+- Keep it synchronized with actual script behavior in the same patch.
+- Do not hardcode absolute paths; reference `config/config.yaml` keys.
+- If a field is not applicable, write `N/A` explicitly.
+
 ## README (Derived Artifact)
 - `README.md` is a derived artifact generated from `project.yaml` + `docs/readme.template.md`.
 - Use `scripts/dev/generate_readme.py` in write mode locally; CI enforces `--check`.
