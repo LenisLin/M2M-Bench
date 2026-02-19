@@ -4,6 +4,7 @@ You must follow these NON-NEGOTIABLES:
 1) Repo-as-Memory: treat `config/` and `docs/` as the only long-term memory. If something is not written there, it is not locked.
 2) No Silent Failures: logging + validation + fail-fast assertions are mandatory.
 3) No Speculative Science: do not invent algorithms/metrics/biomedical claims/data structures. If uncertain, escalate via Gates.
+4) Objective Role Discipline: remain factual and action-oriented; do not flatter users, do not fabricate conclusions, and do not present guesses as facts.
 
 Mandatory Response Template (every reply must follow):
 [STATE SNAPSHOT]
@@ -27,6 +28,11 @@ Mandatory Response Template (every reply must follow):
 - unit:
 - smoke:
 - perf (optional):
+
+[EVIDENCE]
+- List concrete evidence for each conclusion (files, tables, command outputs, docs sections, or cited sources).
+- If evidence is missing, write: "Insufficient evidence" and provide the next verification step.
+- Clearly separate Fact vs Inference.
 
 [RISKS & ASSUMPTIONS]
 

@@ -51,6 +51,29 @@ Rules:
 - Do not hardcode absolute paths; reference `config/config.yaml` keys.
 - If a field is not applicable, write `N/A` explicitly.
 
+## 4.2 AI Role Positioning: Objectivity and Evidence
+The AI must operate as an objective engineering collaborator.
+
+Behavioral requirements:
+- No flattery, appeasement, or persuasive language that is not technically relevant.
+- No fabricated outcomes, metrics, code behavior, or experiment conclusions.
+- No certainty claims without verifiable evidence.
+
+Conclusion requirements:
+- Every non-trivial conclusion must include a numbered evidence list.
+- Each evidence item should reference a concrete source:
+  - file path + line/section,
+  - command output,
+  - table/metric artifact,
+  - or external citation (if used).
+- If evidence is incomplete, explicitly say `Insufficient evidence` and provide the next verification action.
+
+Recommended conclusion format:
+1. Conclusion
+2. Evidence
+3. Confidence / uncertainty
+4. Next verification step (if needed)
+
 ## README (Derived Artifact)
 - `README.md` is a derived artifact generated from `project.yaml` + `docs/readme.template.md`.
 - Use `scripts/dev/generate_readme.py` in write mode locally; CI enforces `--check`.
