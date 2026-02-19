@@ -3,52 +3,69 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-
+CHANGELOG_HEADER = "# Changelog"
 UNRELEASED_HEADER = "## Unreleased"
 
 
-def insert_unreleased_entry(md_text: str, entry: str) -> str:
-    entry = entry.strip()
-    if not entry.startswith("- "):
-        entry = "- " + entry
+def _normalize_entry(entry: str) -> str:
+    stripped = entry.strip()
+    if not stripped.startswith("- "):
+        return "- " + stripped
+    return stripped
 
+
+def _render_lines(lines: list[str]) -> str:
+    return "\n".join(lines).rstrip("\n") + "\n"
+
+
+def _find_line(lines: list[str], expected: str) -> int | None:
+    for index, line in enumerate(lines):
+        if line.strip() == expected:
+            return index
+    return None
+
+
+def _ensure_changelog_header(lines: list[str]) -> list[str]:
+    if _find_line(lines, CHANGELOG_HEADER) is not None:
+        return lines
+
+    if lines:
+        return [CHANGELOG_HEADER, "", *lines]
+    return [CHANGELOG_HEADER, ""]
+
+
+def insert_unreleased_entry(md_text: str, entry: str) -> str:
+    entry_line = _normalize_entry(entry)
     lines = md_text.splitlines()
 
-    # Ensure Unreleased exists
-    if UNRELEASED_HEADER not in md_text:
-        # Insert after first H1 if present, else at top
-        out = []
-        inserted = False
-        for i, line in enumerate(lines):
-            out.append(line)
-            if (not inserted) and line.startswith("# "):
-                out.append("")
-                out.append(UNRELEASED_HEADER)
-                out.append(entry)
-                inserted = True
-        if not inserted:
-            out = [UNRELEASED_HEADER, entry, ""] + lines
-        return "\n".join(out).rstrip() + "\n"
+    if any(line.strip() == entry_line for line in lines):
+        return _render_lines(lines)
 
-    # Insert directly after "## Unreleased" line, before next header of same or higher level
-    out = []
-    inserted = False
-    i = 0
-    while i < len(lines):
-        line = lines[i]
-        out.append(line)
-        if (line.strip() == UNRELEASED_HEADER) and (not inserted):
-            # Insert on next line
-            out.append(entry)
-            inserted = True
-        i += 1
+    lines = _ensure_changelog_header(lines)
 
-    # If entry already present, do not duplicate (simple check)
-    # (Optional: can be enhanced)
-    if md_text.find(entry) != -1:
-        return md_text if md_text.endswith("\n") else (md_text + "\n")
+    unreleased_index = _find_line(lines, UNRELEASED_HEADER)
+    if unreleased_index is None:
+        changelog_index = _find_line(lines, CHANGELOG_HEADER)
+        if changelog_index is None:
+            raise ValueError("Missing changelog header after normalization.")
+        insert_at = changelog_index + 1
+        lines[insert_at:insert_at] = ["", UNRELEASED_HEADER]
+        unreleased_index = _find_line(lines, UNRELEASED_HEADER)
+        if unreleased_index is None:
+            raise ValueError("Failed to create Unreleased section.")
 
-    return "\n".join(out).rstrip() + "\n"
+    end_index = len(lines)
+    for index in range(unreleased_index + 1, len(lines)):
+        if lines[index].startswith("## "):
+            end_index = index
+            break
+
+    insert_at = end_index
+    while insert_at > unreleased_index + 1 and lines[insert_at - 1].strip() == "":
+        insert_at -= 1
+
+    lines.insert(insert_at, entry_line)
+    return _render_lines(lines)
 
 
 def main() -> None:
@@ -60,10 +77,10 @@ def main() -> None:
     path = Path(args.file)
     if not path.exists():
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("# Changelog\n\n## Unreleased\n", encoding="utf-8")
+        path.write_text(f"{CHANGELOG_HEADER}\n", encoding="utf-8")
 
-    md = path.read_text(encoding="utf-8")
-    updated = insert_unreleased_entry(md, args.entry)
+    existing = path.read_text(encoding="utf-8")
+    updated = insert_unreleased_entry(existing, args.entry)
     path.write_text(updated, encoding="utf-8")
 
 

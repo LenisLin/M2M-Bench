@@ -1,7 +1,7 @@
 # AVCP Guidelines
 
 ## Bridge
-**Rule:** Any Python→R handover must be produced via `src/io/bridge.py::save_for_r()` unless explicitly waived in `docs/constraints.md`.
+**Rule:** Any Python→R handover must be produced via `src/avcp_template/io/bridge.py::save_for_r()` unless explicitly waived in `docs/constraints.md`.
 
 Output rules:
 - Location: `paths.interim_viz_dir` from `config/config.yaml` (default: `data/interim_viz`)
@@ -22,3 +22,8 @@ Do NOT append blindly using shell echo.
 Preferred:
 - Provide unified diff patches, OR
 - Use `scripts/dev/update_changelog.py` to insert under `## Unreleased`.
+- `update_changelog.py` is the canonical way to add entries without breaking markdown structure or duplicating bullets.
+
+## README (Derived Artifact)
+- `README.md` is a derived artifact generated from `project.yaml` + `docs/readme.template.md`.
+- Use `scripts/dev/generate_readme.py` in write mode locally; CI enforces `--check`.

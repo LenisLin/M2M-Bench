@@ -1,0 +1,17 @@
+name: avcp-template
+title: AVCP Template
+one_liner: Research engineering starter with AVCP prompts, repo-memory docs, and enforced bridge contracts.
+domain: Agentic research engineering
+stage: Data / Pipeline / Analysis / Manuscript
+owner: TODO-owner
+license: TODO-license
+entrypoints:
+  - python -m pip install -e ".[dev]"
+  - pytest -q
+  - python scripts/dev/generate_readme.py --check
+datasets: []
+outputs:
+  - data/interim_viz/*.parquet
+  - data/interim_viz/*.csv
+  - data/interim_viz/*_meta.json
+components: []
