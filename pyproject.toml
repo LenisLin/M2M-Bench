@@ -1,0 +1,21 @@
+[project]
+name = "avcp-template"
+version = "0.1.0"
+description = "AVCP template repository (prompts + docs + code-enforced tooling)"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "pandas>=2.0",
+  "pyarrow>=12.0",
+  "pyyaml>=6.0",
+  "tqdm>=4.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=7.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
