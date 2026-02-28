@@ -1,7 +1,7 @@
 # AVCP Guidelines
 
 ## Bridge
-**Rule:** Any Python→R handover must be produced via `src/avcp_template/io/bridge.py::save_for_r()` unless explicitly waived in `docs/constraints.md`.
+**Rule:** Any Python→R handover must be produced via `src/avcp_template/io/bridge.py::save_for_r()` unless explicitly waived in `docs/governance/constraints.md`.
 
 Output rules:
 - Location: `paths.interim_viz_dir` from `config/config.yaml` (default: `data/interim_viz`)

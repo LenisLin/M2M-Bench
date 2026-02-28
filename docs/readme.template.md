@@ -11,7 +11,7 @@ AVCP (Agentic Version Control Protocol) is a practical operating model for build
 
 | Risk | Typical symptom | AVCP control |
 |---|---|---|
-| 🧠 Context amnesia | decisions disappear across sessions | `docs/state.md` + `docs/decisions.md` |
+| 🧠 Context amnesia | decisions disappear across sessions | `docs/governance/state.md` + `docs/decisions.md` |
 | 🎭 Hallucinated implementation | invented contracts, guessed logic | tier gates + specs-first workflow |
 | 🤫 Silent failures | pipelines "succeed" with wrong outputs | fail-fast validation + manifests |
 | 📄 Docs drift | README/changelog become stale | generated README + safe changelog updates |
@@ -32,8 +32,8 @@ tests/                   # verification suite
 ### 1) Agent cognition contract
 - Use `prompts/AVCP_SYSTEM_PROMPT_MIN.md` as the pinned operating protocol.
 - Start each coding session by loading:
-  - `docs/state.md`
-  - `docs/constraints.md`
+  - `docs/governance/state.md`
+  - `docs/governance/constraints.md`
   - `docs/decisions.md`
   - `docs/api_specs.md`
   - `docs/data_contracts.md`
@@ -73,7 +73,7 @@ python scripts/dev/generate_readme.py --check
 
 ```text
 Read and enforce prompts/AVCP_SYSTEM_PROMPT_MIN.md.
-Before coding, read docs/state.md, docs/constraints.md, docs/decisions.md,
+Before coding, read docs/governance/state.md, docs/governance/constraints.md, docs/decisions.md,
 docs/api_specs.md, docs/data_contracts.md, docs/avcp_guidelines.md.
 Reply with:
 1) [STATE SNAPSHOT]
@@ -88,7 +88,7 @@ No invented claims. If uncertain, escalate via gates.
 
 Ask the agent to:
 1. update `project.yaml` (`name`, `title`, `domain`, `stage`, `owner`, `license`, `entrypoints`),
-2. update sprint context in `docs/state.md`,
+2. update sprint context in `docs/governance/state.md`,
 3. regenerate README via `python scripts/dev/generate_readme.py`.
 
 ### A4. Daily delivery loop
@@ -134,8 +134,8 @@ Copy into the existing repository root:
 This repository is migrating to AVCP.
 Read prompts/AVCP_SYSTEM_PROMPT_MIN.md and docs/avcp_guidelines.md first.
 Produce a docs-first migration snapshot:
-- current state -> docs/state.md
-- hard constraints -> docs/constraints.md
+- current state -> docs/governance/state.md
+- hard constraints -> docs/governance/constraints.md
 - open design decisions -> docs/decisions.md
 No large refactor in this step.
 ```

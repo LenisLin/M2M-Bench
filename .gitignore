@@ -1,34 +1,11 @@
-# Python
+# data artifacts (do not commit)
+data/
+outputs/
+*.npy
+*.pt
+*.parquet
+
+# caches
 __pycache__/
-*.py[cod]
-*.pyo
-*.pyd
-*.so
-*.egg-info/
-.dist/
-build/
-dist/
-
-# Envs
-.venv/
-venv/
-env/
-
-# Tool caches
-.ruff_cache/
-.mypy_cache/
-.pytest_cache/
-
-# Logs / results
-logs/
-results/
-data/processed/
-data/interim_viz/
-*.log
-
-# Notebooks
+*.pyc
 .ipynb_checkpoints/
-
-# OS
-.DS_Store
-Thumbs.db
