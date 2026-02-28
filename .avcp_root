@@ -1,0 +1,5 @@
+project_name: M2M-Bench
+created_at: 2026-02-28
+owner: lenislin
+contract_root: docs
+notes: AVCP root sentinel for run isolation and audit gating
