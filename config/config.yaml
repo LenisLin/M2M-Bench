@@ -1,2 +1,20 @@
+# M2M-Bench Global Configuration (S0-S7 Pipeline)
+
+project:
+  name: m2m-bench
+  version: 0.4.0
+  seed: 619  # 全局唯一真随机数种子 (Frozen)
+
 paths:
-  interim_viz_dir: data/interim_viz
+  # 外部/原始输入源 (Read-only)
+  raw_k562_dir: "/mnt/NAS_21T/ProjectData/Chem2Gen/Benchmark_Datasets/Evaluation_Set_K562"
+  
+  # 内部快照与运行结果 (Managed by pipeline)
+  task1_snapshot: "data/task1_snapshot_v1"
+  task2_snapshot: "data/task2_snapshot_v1"
+  runs_dir: "runs"
+
+compute:
+  edist_max_n: 256
+  hit_k_list: [1, 5, 10]
+  workers: 8  # 仅用于加速，不影响随机性

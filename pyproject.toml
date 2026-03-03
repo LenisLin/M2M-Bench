@@ -3,9 +3,9 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "avcp-template"
-version = "0.1.0"
-description = "AVCP template repository (prompts + docs + code-enforced tooling)"
+name = "m2m-bench"
+version = "0.4.0"
+description = "M2M-Bench: Modality and Mechanism Concordance Benchmark"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
@@ -32,6 +32,7 @@ package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+include = ["m2mbench*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
