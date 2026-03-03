@@ -21,3 +21,5 @@
 ## Systema
 - Systema view is removed in the reboot phase.
 - Only Standard view is computed and reported.
+
+"Systema view is strictly excluded from all analytical pipelines and outputs."
