@@ -1,127 +1,61 @@
-## Completed Stages
+## Current Progress Update
 
-- **S2 complete and validated**: `scripts/s2_task1_cross_metrics.py`
-  - Validation evidence: `runs/s2_task1_cross_metrics_0303/s2_task1_cross_metrics/audit_assertions.json`
-  - Status: **9/9 assertions passed**
-  - Scope validated: Task1 snapshot isolation, cross-contract validation, pathway projection-on-load policy, eligibility gate, deterministic parallelism, denominator conservation, chance identity tolerance, output routing, input path isolation.
+Last updated: 2026-03-13
 
-- **S3 complete and validated**: `scripts/s3_build_task2_snapshot.py`
-  - Validation evidence: `runs/s3_build_task2_data_0305/s3_build_task2_snapshot/audit_assertions.json`
-  - Status: **7/7 assertions passed**
-  - Scope validated: seed lock, raw K562 file presence, raw alignment, pairing contract, pathway projection contract, output routing, input path isolation.
+### Authoritative benchmark status
 
-- **Decoupled FM extractors complete and validated**
-  - `scripts/fm_extractors/extract_scgpt.py`
-    - Validation: `runs/fm_scgpt_0305/extract_scgpt/audit_assertions.json`
-    - Status: **10/10 assertions passed**
-  - `scripts/fm_extractors/extract_geneformer.py`
-    - Validation: `runs/fm_geneformer_0305/extract_geneformer/audit_assertions.json`
-    - Status: **11/11 assertions passed**
-  - `scripts/fm_extractors/extract_scbert.py`
-    - Validation: `runs/fm_scbert_0305/extract_scbert/audit_assertions.json`
-    - Status: **11/11 assertions passed**
-  - `scripts/fm_extractors/extract_scfoundation.py`
-    - Validation: `runs/fm_scfoundation_0305/extract_scfoundation/audit_assertions.json`
-    - Status: **11/11 assertions passed**
-  - `scripts/fm_extractors/extract_uce.py`
-    - Validation: `runs/fm_uce_0305/extract_uce/audit_assertions.json`
-    - Status: **10/10 assertions passed**
-  - `scripts/fm_extractors/extract_state.py`
-    - Validation: `runs/0303/extract_state/audit_assertions.json`
-    - Status: **10/10 assertions passed**
-  - `scripts/fm_extractors/extract_tahoex1.py`
-    - Validation: `runs/fm_tahoex1_0305/extract_tahoex1/audit_assertions.json`
-    - Status: **11/11 assertions passed**
+- **Task1 S0 complete and audited**
+  - Run: `runs/s0_build_data_inventory_0303/s0_build_data_inventory`
+  - Evidence: `run_manifest.json`, `audit_assertions.json`, `task1_data_inventory_long.csv`, `data_source_manifest.csv`
 
-## Data Assets
+- **Task1 S1 complete and audited**
+  - Run: `runs/s1_task1_internal_metrics_0303/s1_task1_internal_metrics`
+  - Status: hard assertions pass; one non-blocking soft audit exception for FM policy presence
 
-### `data/task1_snapshot_v1/` verified state
+- **Task1 S2 complete and audited**
+  - Run: `runs/s2_task1_cross_metrics_0303/s2_task1_cross_metrics`
+  - Status: assertions pass; cross-chemical exclusion remains an explicit contract outcome
 
-- Frozen Task1 input snapshot is present and populated with:
-  - `cross_contract/` assets
-  - `pathway/hallmark-w-2477x50.npy`
-  - `scperturb_delta/` gene + pathway deltas
-  - `fm_delta/` bundles for `scgpt`, `geneformer`, `scbert`, `scfoundation`, `uce`, `state`, `tahoex1_3b`, plus `pca50`, `pca100`, `pca200`
+- **Corrected multisource Task2 S3-S6 complete and audited**
+  - S3: `runs/0310_fix_1hae/s3_build_task2_multisource_snapshot`
+  - S4: `runs/s4_multisource_impl_verify_20260310_c/s4_task2_group_concordance_multisource`
+  - S5: `runs/s5_multisource_impl_verify_20260311_a/s5_task2_retrieval_multisource`
+  - S6: `runs/s6_multisource_impl_verify_20260311_a/s6_task2_result_synthesis_multisource`
 
-- Verified representation dimensions:
-  - Pathway projection matrix: **(2477, 50)**
-  - `scperturb-drug`: gene **(282133, 2477)**, pathway **(282133, 50)**, meta rows **282133**
-  - `scperturb-crispr`: gene **(1334725, 2477)**, pathway **(1334725, 50)**, meta rows **1334725**
+- **S7 implemented and evidenced**
+  - Script: `scripts/s7_project_benchmark_synthesis.py`
+  - Implcheck run: `runs/s7_project_benchmark_synthesis_implcheck_20260311_a/s7_project_benchmark_synthesis`
 
-- Verified FM delta bundle dimensions:
-  - Chemical rows are **282133** for all FM/PCA bundles
-  - Genetic rows are **1334725** for `scgpt`, `scbert`, `scfoundation`, `uce`, `state`, `tahoex1_3b`, `pca50`, `pca100`, `pca200`
-  - `geneformer/Genetic_delta_cell.npy` is present at **(775317, 768)** with matching meta rows **775317**
-  - FM/PCA representation widths:
-    - `scgpt`: **512**
-    - `geneformer`: **768**
-    - `scbert`: **200**
-    - `scfoundation`: **3072**
-    - `uce`: **1280**
-    - `state`: **2058**
-    - `tahoex1_3b`: **2560**
-    - `pca50` / `pca100` / `pca200`: **50 / 100 / 200**
+### Storage migration status
 
-### `data/task2_snapshot_v1/` verified state
+- Authoritative active results have been migrated to NAS-backed storage under:
+  - `/mnt/NAS_21T/ProjectData/M2M/runs`
+- Historical run bundles have been archived under:
+  - `/mnt/NAS_21T/ProjectData/M2M/archive/runs`
+- Reports have been archived under:
+  - `/mnt/NAS_21T/ProjectData/M2M/archive/reports`
+- Local path compatibility is currently provided by:
+  - a real local `runs/` directory with run-id-level symlinks under `runs/`
+  - a root `reports` symlink
 
-- Frozen Task2 K562 snapshot is present and populated with:
-  - Raw copied assets: `CRISPR_counts.pt`, `CRISPR_meta.csv`, `Drug_counts.pt`, `Drug_meta.csv`, `Common_Targets_K562.csv`, `shared_var_names.csv`
-  - Derived core assets: `derived/pair_list.parquet`, `derived/delta_meta.csv`, `derived/gene_delta.npy`, `derived/pathway_delta.npy`
-  - FM outputs under `k562/fm/` for `scgpt`, `geneformer`, `scbert`, `scfoundation`, `uce`, `state`, `tahoe-x1`
+### Post-migration verification
 
-- Verified raw/base dimensions:
-  - `CRISPR_meta.csv` / `CRISPR_counts.pt`: **14315 rows**
-  - `Drug_meta.csv` / `Drug_counts.pt`: **30829 rows**
-  - Shared gene dimension: **8363**
+- Post-migration verification is complete for both NAS-backed authoritative runs and archive-backed historical runs.
+- Operational execution, reconciliation, and verification records are archived under:
+  - `/mnt/NAS_21T/ProjectData/M2M/manifests/storage_migration_manifest.json`
+  - `/mnt/NAS_21T/ProjectData/M2M/manifests/local_repo_housekeeping/`
+- The active repo surface no longer depends on repo-root migration, reconciliation, or verification artifacts.
 
-- **Strict Task2 row alignment is frozen at 30518 rows**
-  - `derived/delta_meta.csv`: **30518 rows**
-  - `derived/gene_delta.npy`: **(30518, 8363)**
-  - `derived/pathway_delta.npy`: **(30518, 50)**
-  - Every Task2 FM `fm_delta.npy` and `fm_delta_meta.csv` pair is aligned to the same **30518** rows
+### Accepted storage strategy
 
-- Verified Task2 FM representation widths:
-  - `scgpt`: **(30518, 512)**
-  - `geneformer`: **(30518, 1152)**
-  - `scbert`: **(30518, 200)**
-  - `scfoundation`: **(30518, 3072)**
-  - `uce`: **(30518, 1280)**
-  - `state`: **(30518, 2058)**
-  - `tahoe-x1`: **(30518, 512)**
+- Root-level `runs -> /mnt/NAS_21T/ProjectData/M2M/runs` normalization is not the chosen current strategy.
+- The accepted production model is:
+  - keep local `runs/` as a real directory
+  - preserve local `runs/<run_id>` compatibility with run-id-level symlinks to NAS active or NAS archive targets as appropriate
 
-## Core Contracts Enforced
+### Active interpretation rule
 
-- `GLOBAL_SEED=619` is rigidly enforced; scripts fail fast if the provided seed differs.
-- Task2 row preservation is absolute:
-  - `delta_meta.row_id` is contiguous `0..N-1`
-  - FM extraction never drops rows
-  - invalid rows are preserved as all-`np.nan` vectors with `valid_mask=False`
-- `input_path_isolation` is enforced using `Path.absolute()` rather than `resolve()` so symlinked model roots preserve logical isolation semantics.
-- S3 pairing contract is rigid:
-  - `n_controls_used = min(pool_size, 50)`
-  - controls are unique per treated row
-  - selection is without replacement
-  - missing control pools soft-fail into attrition with explicit reason tracking
-- OOM handling is hardened in the extractor family via retry loops with dynamic batch-size reduction rather than silent failure.
-- Tahoe-x1 extraction is wrapped through Docker subprocess execution with explicit image and shared-memory parameters.
-- Output routing is isolated per stage under `runs/<run_id>/<stage>/`, with `run_manifest.json`, `audit_assertions.json`, and `manifest.json` emitted as standard AVCP artifacts.
-
-## Pending Tasks
-
-- **S4 remains to be implemented**: `scripts/s4_task2_group_concordance.py`
-  - Current state: header contract exists; no completed implementation checkpoint.
-  - Known risks requiring a fresh architectural approach:
-    - dynamic globbing across FM assets
-    - file descriptor exhaustion from too many simultaneously-open arrays/artifacts
-    - chemical target cardinality complexity / imbalance
-- **S5 remains to be implemented**: `scripts/s5_task2_retrieval.py`
-  - Current state: header contract exists; no completed implementation checkpoint.
-
-## Working Tree Note
-
-- Current local working tree also contains unrelated modifications outside the requested checkpoint commits:
-  - modified: `scripts/s0_build_data_inventory.py`
-  - modified: `scripts/s1_task1_internal_metrics.py`
-  - untracked: `scripts/tmp_audit_task2_fm_snapshot.py`
-  - untracked: `runs/`
-- The commit script below intentionally stages only the S2, S3, and FM extractor script files.
+- “Preserve authoritative artifacts” now means:
+  - preserve the authoritative data on NAS
+  - preserve local project-path usability through symlink-compatible paths
+  - do not require authoritative run bundles to remain on local disk as regular directories
