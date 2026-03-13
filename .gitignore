@@ -5,6 +5,11 @@ outputs/
 *.pt
 *.parquet
 
+# repo-local storage roots (keep out of git)
+/runs/
+/reports/
+/reports
+
 # caches
 __pycache__/
 *.pyc
