@@ -1,6 +1,9 @@
 # SCRIPT_HEADER_CONTRACT
 # Script: scripts/s3_build_task2_snapshot.py
-# Purpose: Build deterministic Task2 K562 core snapshot artifacts (pairing + Gene/Pathway deltas) without FM extraction.
+# Legacy note:
+#   - Preserved historical scPerturb-K562 S3 artifact.
+#   - Corrected multisource Task2 snapshot materialization now lives in scripts/s3_build_task2_multisource_snapshot.py.
+# Purpose: Build deterministic legacy/interim Task2 K562 core snapshot artifacts (pairing + Gene/Pathway deltas) without FM extraction.
 # Inputs:
 #   - Raw K562 Data: config/config.yaml::paths.raw_k562_dir
 #   - Task1 Pathway Assets: config/config.yaml::paths.task1_snapshot/pathway + lincs-gene-alignment.csv
@@ -31,7 +34,7 @@
 #   - Missing required raw inputs/pathway assets -> exit non-zero
 #   - No valid treated rows after pairing -> exit non-zero
 #   - Pathway projection contract invalid -> exit non-zero
-# Last Updated: 2026-03-05
+# Last Updated: 2026-03-13
 
 """
 Inputs:
