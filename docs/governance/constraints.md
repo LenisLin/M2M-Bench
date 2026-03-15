@@ -1,13 +1,13 @@
-# Data Constraints（Task1 已冻结可用；Task2 需从 Task1-internal + K562 raw 重建）
+# Data Constraints（Task1 已冻结可用；Task2 corrected multisource successor 已物化）
 
 ## 0. 状态与范围（冻结口径）
 
 * **Task1 输入数据已冻结且可用**：`data/task1_snapshot_v1/` 为唯一来源（本轮不修改其内容）。
-* **Task2 输入数据尚未准备好**：本文件仅规定 Task2 应如何从：
-
-  1. **Task1-internal 的 LINCS 全量数据**派生出 Task2-LINCS 子集；
-  2. **scPerturb 的 K562 evaluation set（外部路径）**重建 Task2-K562（含 gene/pathway/FM）。
-* Task2 的最终数据应迁移到：`data/task2_snapshot_v1/`（外部路径只作为临时 source，不允许长期依赖）。
+* **Task2 当前已物化的本地状态仅为 legacy/interim scPerturb-K562 子集**：`data/task2_snapshot_v1/k562/` 保留为历史证据，不可被重写为 corrected final Task2。
+* **Corrected Task2 contract 是 multisource**：必须同时纳入：
+  1. **Task1-internal 的 LINCS 全量数据**派生出的 Task2-LINCS 子集；
+  2. **复用已审计 legacy K562 证据并重定址到 corrected successor root 的** Task2-scPerturb-K562 子集（含 gene/pathway/FM）。
+* Corrected Task2 successor snapshot 必须使用独立版本根目录，而不是静默覆写 `data/task2_snapshot_v1/`。当前冻结根目录为 `data/task2_snapshot_v2/`。
 
 ---
 
@@ -184,31 +184,39 @@
 
 ---
 
-## 2. Task2 数据（当前未就绪；必须从以下来源重建）
+## 2. Task2 数据（corrected multisource successor contract）
 
 > 重要：Task2 的 LINCS 子集必须从 **Task1-internal 的 LINCS 全量**派生，而不是从 cross 子集派生（否则会丢实例，影响机制一致性覆盖）。
+
+> 重要：`dataset, cell_line, target_token` 是 Task2 的 **analysis/cohort key**，不是 snapshot 行身份键。诸如 `global_idx_lincs`、`row_id`、`treated_cell_id`、`query_uid` 等属于 row identity / audit identity。
 
 ### 2.1 Task2-LINCS（从 Task1-internal LINCS 派生）
 
 #### 2.1.1 Task2-LINCS 准入规则（机制匹配）
 
-在 LINCS 内，定义机制匹配键：
+在 LINCS 内，定义 Task2 analysis/cohort key：
 
-* `task2_key = (cell_line, target)`
+* `mech_key = (dataset="LINCS", cell_line, target_token)`
 
 准入条件（必须同时满足）：
 
-* 对同一 `task2_key`，LINCS 中 **存在至少 1 个 Chemical 实例**，且 **存在至少 1 个 Genetic 实例**。
+* 对同一 `mech_key`，LINCS 中 **存在至少 1 个 Chemical 实例**；
+* 对同一 `mech_key`，LINCS 中 **存在至少 1 个 Genetic 实例**。
 
 > dose/time 不进入匹配键；仅作为 instance 元数据保留。
 
+**row identity（LINCS）**
+
+* `global_idx_lincs` 仍然是实例层 canonical 行键
+* 一个 Chemical 行可通过 `target_tokens` 贡献给多个 `target_token` cohort，但不复制行身份
+
 #### 2.1.2 Task2-LINCS 派生清单（Task2 snapshot 的入口表）
 
-目标路径：`data/task2_snapshot_v1/lincs/task2_lincs_pairs.csv`
+目标路径：`data/task2_snapshot_v2/lincs/task2_lincs_pairs.csv`
 
 建议字段（最小可审计）：
 
-* `cell_line`, `target`
+* `dataset="LINCS"`, `cell_line`, `target_token`
 * `n_chemical`, `n_genetic`
 * `chemical_global_idx_list`（JSON string 或外联展开表）
 * `genetic_global_idx_list`
@@ -216,7 +224,7 @@
 一致性约束（fail-fast）：
 
 * 所有 idx 在 `[0, N_lincs)` 内
-* `cell_line/target` 不允许为 `"NA"`（除非你明确允许；建议默认禁止）
+* `cell_line/target_token` 不允许为 `"NA"`（除非你明确允许；建议默认禁止）
 
 覆盖统计（必须记录到 meta，不 fail-fast）：
 
@@ -225,7 +233,7 @@
 
 ---
 
-### 2.2 Task2-scPerturb（仅 K562 子集；当前外部路径）
+### 2.2 Task2-scPerturb（corrected v1 仅 K562 子集）
 
 #### 2.2.1 当前可用文件（外部 evaluation set）
 
@@ -240,21 +248,51 @@
 * `Common_Targets_K562.csv`
 * `shared_var_names.csv`
 
-#### 2.2.2 上游 raw 数据源（用于重算 delta 与 FM）
+#### 2.2.2 当前物化策略（冻结）
 
-raw/processed 源路径：
+当前 corrected multisource Task2 的 scPerturb K562 子树**不是**从 raw 重新计算；
+它通过复用已审计的 legacy K562 证据并重定址到 corrected successor root
+来物化：
 
-* `/mnt/NAS_21T/ProjectData/OSMOSIS/processed/scPerturb_Processed`
+* source: `data/task2_snapshot_v1/k562/`
+* destination: `data/task2_snapshot_v2/scperturb_k562/`
 
-**原因（你已指出）**：现有处理好的 delta/聚合版本缺少 (treated, control) pairing 证据；若仅基于其输出重算 FM embedding/delta，可能与 gene/pathway delta 的 pairing 不一致，导致 Task2 机制一致性结论不可审计。
+复用内容必须保留：
 
-**因此，Task2-K562 采用策略：从 raw/processed 源重算 gene/pathway/FM 的 embedding 与 delta，并在 snapshot 中持久化 pairing 证据（见 2.3）。**
+* 基础输入文件（counts/meta/common targets/shared var names）
+* `derived/pair_list.parquet`
+* `derived/delta_meta.csv`
+* `derived/gene_delta.npy`
+* `derived/pathway_delta.npy`
+* `fm/<model>/fm_delta.npy`
+* `fm/<model>/fm_delta_meta.csv`
+* `fm/<model>/delta_operator_policy.json`
+
+authoritative evidence:
+
+* `runs/0310_fix_1hae/s3_build_task2_multisource_snapshot/run_manifest.json::scperturb_reuse_summary`
+* `data/task2_snapshot_v2/snapshot_manifest.json::datasets.scPerturb.subtree`
+
+**analysis/cohort key（scPerturb K562）**
+
+* `mech_key = (dataset="scPerturb", cell_line="K562", target_token)`
+
+**row identity（scPerturb K562）**
+
+* `row_id`, `treated_cell_id`, `query_uid` 等保持实例层身份
+* Chemical 行可通过 `target_tokens` 参与多个 `target_token` cohort，但不复制 snapshot 行身份
 
 ---
 
 ### 2.3 Task2-K562：delta 构造与 pairing 证据（必须可审计）
 
-你给的 delta 构造逻辑：对每个 treated cell，选择若干 control cells（同 dataset、同 cell_line、同 target），并计算 delta（gene/pathway/FM 都需一致）。
+Task2-K562 的 delta 构造逻辑：对每个 treated cell，选择若干 control cells，并计算 delta（gene/pathway/FM 都需一致）。
+
+控制组冻结规则：
+
+* CRISPR：all CRISPR controls
+* Drug：Drug controls with matched `time`
+* controls 不按 target 匹配；controls 是 untargeted
 
 **数据约束要求：Task2 snapshot 必须持久化以下至少之一（二选一）**：
 
@@ -274,7 +312,7 @@ A) **显式 pairing 列表（最强可审计）**
 
 ### 2.4 Task2 snapshot 目标目录结构（同意迁移）
 
-目标根：`data/task2_snapshot_v1/`
+目标根：`data/task2_snapshot_v2/`
 
 建议结构：
 
@@ -282,24 +320,29 @@ A) **显式 pairing 列表（最强可审计）**
 
   * `task2_lincs_pairs.csv`
   * （可选但推荐）`task2_lincs_instances.parquet`（展开到 instance 表，便于复用 Task1 管线）
-* `k562/`
+* `scperturb_k562/`
 
   * `CRISPR_counts.pt`, `CRISPR_meta.csv`
   * `Drug_counts.pt`, `Drug_meta.csv`
   * `Common_Targets_K562.csv`, `shared_var_names.csv`
-  * `raw_source_manifest.json`（记录上游 raw 路径与版本/文件清单）
   * `derived/`
 
+    * `pair_list.parquet`
     * `gene_delta.npy`, `pathway_delta.npy`
     * `delta_meta.csv`（统一 schema：cell_id、perturbation_type、cell_line、target、dose/time、row_id 等）
   * `fm/<model_name>/`
 
-    * `treated_embeddings.npy`（或等价）
-    * `control_sums.npy`, `control_counts.npy`
     * `fm_delta.npy`
     * `fm_delta_meta.csv`
     * `delta_operator_policy.json`
-    * `control_selection_policy.json`（若采用方案 B）
+
+---
+
+### 2.5 Representation scope policy（冻结）
+
+* LINCS：只允许 `Gene`, `Pathway`
+* scPerturb K562：允许 `Gene`, `Pathway`, `scgpt`, `geneformer`, `scbert`, `scfoundation`, `uce`, `state`, `tahoe-x1`
+* 不支持的表示必须视为 scope policy，而不是 attrition
 
 ---
 
@@ -310,20 +353,28 @@ A) **显式 pairing 列表（最强可审计）**
 | Task1-internal                 | LINCS             | `data/task1_snapshot_v1/lincs/*` + `pathway/W`              | Gene, Pathway                      |
 | Task1-internal                 | scPerturb         | `data/task1_snapshot_v1/scperturb_delta/*` + `fm_delta/*`   | Gene, Pathway, FM:*                |
 | Task1-cross                    | LINCS ↔ scPerturb | `task1_snapshot_v1/cross_contract/*` + 两侧 meta+delta        | Gene, Pathway（FM 不进入 cross，除非另行冻结） |
-| Task2 (mechanism)              | LINCS             | **从 Task1-internal LINCS 全量派生**：`task2_lincs_pairs.csv`     | Gene, Pathway                      |
-| Task2 (mechanism, K562 subset) | scPerturb-K562    | 外部源 → 迁移到 `data/task2_snapshot_v1/k562/`，并从 raw 重算 delta/FM | Gene, Pathway, FM:*（K562 子集）       |
+| Task2 (mechanism, corrected)   | LINCS             | **从 Task1-internal LINCS 全量派生**：`task2_lincs_pairs.csv`     | Gene, Pathway                      |
+| Task2 (mechanism, corrected)   | scPerturb-K562    | 复用已审计 legacy K562 证据并物化到 `data/task2_snapshot_v2/scperturb_k562/` | Gene, Pathway, scgpt, geneformer, scbert, scfoundation, uce, state, tahoe-x1 |
+| Task2 (legacy/interim)         | scPerturb-K562    | `data/task2_snapshot_v1/k562/`                                    | current audited historical subset  |
 
 ---
 
 ## 4. Task2 就绪判定（用于实现层 fail-fast）
 
-Task2 代码入口应先检查：
+Corrected Task2 代码入口应先检查：
 
-* `data/task2_snapshot_v1/` 存在且包含：
-
+* `data/task2_snapshot_v2/` 存在且包含：
   * `lincs/task2_lincs_pairs.csv`
-  * `k562/` 的基础文件（counts/meta/common targets/var names）
-  * `k562/derived/`（至少 gene/pathway delta 与 meta）**或**能够明确触发“重算管线”（由 scripts 驱动）
-  * 如要做 FM：`k562/fm/<model>/` 必须包含 operator policy +（pairing 证据 A 或 B）
+  * `scperturb_k562/` 的基础文件（counts/meta/common targets/var names）
+  * `scperturb_k562/derived/`（至少 pair_list、gene/pathway delta 与 meta）
+  * 如要做 FM：`scperturb_k562/fm/<model>/` 必须包含 operator policy + pairing 证据
 
-若缺失：直接报 `TASK2_SNAPSHOT_NOT_READY`，禁止隐式回退到 Task1 snapshot。
+额外约束：
+
+* 所有 Task2 analysis-facing 数据必须可还原到 `dataset, cell_line, target_token`
+* LINCS 不允许出现 FM 表示
+* corrected Task2 v1 core metrics 必须按 `dataset` 与 `cell_line` 分层，禁止 raw-pool LINCS 与 scPerturb
+
+当前 `data/task2_snapshot_v1/` 只满足 legacy/interim scPerturb-K562 历史证据口径，不满足 corrected final Task2 readiness。
+
+若 corrected successor 缺失：直接报 `TASK2_SNAPSHOT_NOT_READY`，禁止隐式回退到 Task1 snapshot 或 legacy `task2_snapshot_v1/` 充当 final Task2。
