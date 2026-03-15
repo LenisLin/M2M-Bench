@@ -1,0 +1,16 @@
+item_id,item_type,target_path,planned_action,phase_or_section,default_status,notes
+F01,doc,docs/manuscript_analysis_expansion_plan.md,create,plan_source_of_truth,planned,Primary planning document for the next manuscript-support phase.
+F02,doc,docs/manuscript_analysis_file_change_inventory.csv,create,plan_supporting_inventory,planned,Optional file-change inventory for plan execution tracking.
+F03,doc,docs/manuscript_support_table_specs.md,create,output_table_specs,planned,Defines manuscript-only support table schemas and guardrails.
+F04,doc,docs/manuscript_blueprint.md,update,document_change_plan,pending,Add a short execution note pointing future work to the expansion plan.
+F05,doc,docs/manuscript_evidence_extraction_plan.md,update,document_change_plan,pending,Reference the expansion-plan phase order for new support tables.
+F06,doc,docs/manuscript_source_register.md,update,document_change_plan,pending,Note that new manuscript-only support tables should be registered downstream.
+F07,doc,docs/manuscript_blocker_memo.md,update,document_change_plan,pending,Reference the new gated-analysis sequencing.
+F08,doc,docs/manuscript_claim_to_evidence_map.csv,update,document_change_plan,pending,Future rows should reference new bridge and statistical support tables once materialized.
+F09,doc,docs/manuscript_panel_support_ledger.csv,update,document_change_plan,pending,Future updates should carry composition-before-enrichment and local-only cautions.
+F10,script,scripts/manuscript_analysis_support.py,create,code_change_plan,planned,Registry and input-check entrypoint for the non-enrichment manuscript-support analyses.
+F11,script,scripts/manuscript_enrichment_support.py,create,code_change_plan,planned,Registry and input-check entrypoint for enrichment-layer prerequisites.
+F12,script,scripts/manuscript_support_remediation.py,inspect,code_change_plan,pending,Reuse helpers where practical; do not expand it into benchmark-stage logic.
+F13,script,scripts/s2_task1_cross_metrics.py,inspect,code_change_plan,pending,Use existing task1_group_cross.parquet as the cross-side anchor.
+F14,script,scripts/s5_task2_retrieval_multisource.py,inspect,code_change_plan,pending,Use existing per-query fields for downstream joins; no default stage edits.
+F15,script,scripts/s1_task1_internal_metrics.py,conditional_last_resort,code_change_plan,last_resort_only,Only touch if current S1 outputs are proven insufficient for A1 A2 A4 and only to export already-computed group rows.
