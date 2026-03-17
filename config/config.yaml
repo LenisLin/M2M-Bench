@@ -1,4 +1,4 @@
-# M2M-Bench Global Configuration (S0-S7 Pipeline)
+# M2M-Bench Global Configuration (Task1 + Legacy/Corrected Task2)
 
 project:
   name: m2m-bench
@@ -11,8 +11,9 @@ paths:
   
   # 内部快照与运行结果 (Managed by pipeline)
   task1_snapshot: "data/task1_snapshot_v1"
-  task2_snapshot: "data/task2_snapshot_v1"
-  runs_dir: "runs"
+  task2_snapshot: "data/task2_snapshot_v1"  # legacy/interim scPerturb-K562 snapshot; reused by legacy Task2 scripts and corrected multisource S3
+  task2_snapshot_corrected: "data/task2_snapshot_v2"  # corrected multisource Task2 successor root materialized locally
+  runs_dir: "runs"  # 本地兼容路径；当前可通过 NAS-backed symlink 保持可用
 
 compute:
   edist_max_n: 256
