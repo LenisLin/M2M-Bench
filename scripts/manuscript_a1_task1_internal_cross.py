@@ -1,349 +1,394 @@
 #!/usr/bin/env python3
 """
-Phase 1 manuscript-support skeleton for A1: Task1 internal vs Task1 cross.
+Build the active A1 Task1 internal-vs-cross bridge table.
 
-Analysis purpose:
-- Compare Task1 internal versus Task1 cross performance on the lawful
-  common-scope slice.
-
-Why this script exists in the manuscript workflow:
-- The manuscript needs a downstream comparison scaffold that distinguishes
-  between preferred exact pairing and explicit summary fallback without
-  overstating what the frozen local outputs support.
-
-Lawful input scope:
-- reviewed local S1 `task1_leaderboard_long.csv`
-- reviewed local S1 `task1_retrieval_summary.csv`
-- reviewed local S1 `task1_retrieval_per_query.parquet` only when present and
-  schema-compatible
-- reviewed local S2 `task1_cross_leaderboard_long.csv`
-- reviewed local S2 `task1_cross_retrieval_summary.csv`
-- reviewed local S2 `task1_cross_retrieval_per_query.parquet`
-- reviewed local S2 `task1_group_cross.parquet`
-
-Prohibited behavior:
-- do not invent pseudo-pairs
-- do not label summary fallback as if it were exact pairing
-- do not re-export or mutate upstream benchmark artifacts
-- do not treat absent local exact-pair support as permission to guess
-
-Intended output semantics:
-- one row per lawful comparison unit after implementation review
-- rows must carry `comparison_mode` that distinguishes exact pairing from
-  summary fallback
-- rows must carry explicit status and notes when exact pairing is unavailable
-
-What remains TODO in later implementation:
-- review whether exact lawful pairing can be supported from current frozen
-  per-query outputs alone
-- if not, implement the highest-validity summary fallback with explicit labels
-- freeze the final row granularity for fallback comparisons
-- confirm whether any last-resort upstream internal-group export is needed;
-  this scaffold does not assume it is allowed
+The frozen comparison unit is the shared `(dataset, cell_line, target)` group.
+`representation` is retained only as source detail for explicit row-level
+provenance and never defines the shared-group universe.
 """
 
 from __future__ import annotations
 
 import argparse
+import math
 import sys
 from pathlib import Path
-from typing import Iterable
 
 import pandas as pd
+import pyarrow.parquet as pq
+
+from manuscript_task1_group_support import (
+    COMMON_REPRESENTATIONS,
+    DETAIL_COLUMNS,
+    GROUP_METRICS,
+    TRIPLET_COLUMNS,
+    compute_task1_internal_group_metrics,
+    load_task1_cross_group_metrics,
+    source_dataset_from_cross_direction,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
-NAS_RUNS_ROOT = Path("/mnt/NAS_21T/ProjectData/M2M/runs")
-MANUSCRIPT_PHASE1_ROOT = NAS_RUNS_ROOT / "manuscript_phase1" / "a1_task1_internal_cross"
 
-DEFAULT_INTERNAL_LEADERBOARD_PATH = Path(
-    "/mnt/NAS_21T/ProjectData/M2M/runs/s1_task1_internal_metrics_0303/s1_task1_internal_metrics/task1_leaderboard_long.csv"
-)
-DEFAULT_INTERNAL_SUMMARY_PATH = Path(
-    "/mnt/NAS_21T/ProjectData/M2M/runs/s1_task1_internal_metrics_0303/s1_task1_internal_metrics/task1_retrieval_summary.csv"
-)
 DEFAULT_INTERNAL_PER_QUERY_PATH = Path(
     "/mnt/NAS_21T/ProjectData/M2M/runs/s1_task1_internal_metrics_0303/s1_task1_internal_metrics/task1_retrieval_per_query.parquet"
-)
-DEFAULT_CROSS_LEADERBOARD_PATH = Path(
-    "/mnt/NAS_21T/ProjectData/M2M/runs/s2_task1_cross_metrics_0303/s2_task1_cross_metrics/task1_cross_leaderboard_long.csv"
-)
-DEFAULT_CROSS_SUMMARY_PATH = Path(
-    "/mnt/NAS_21T/ProjectData/M2M/runs/s2_task1_cross_metrics_0303/s2_task1_cross_metrics/task1_cross_retrieval_summary.csv"
 )
 DEFAULT_CROSS_PER_QUERY_PATH = Path(
     "/mnt/NAS_21T/ProjectData/M2M/runs/s2_task1_cross_metrics_0303/s2_task1_cross_metrics/task1_cross_retrieval_per_query.parquet"
 )
-DEFAULT_GROUP_CROSS_PATH = Path(
+DEFAULT_TASK1_GROUP_CROSS_PATH = Path(
     "/mnt/NAS_21T/ProjectData/M2M/runs/s2_task1_cross_metrics_0303/s2_task1_cross_metrics/task1_group_cross.parquet"
 )
-DEFAULT_OUTPUT_PATH = MANUSCRIPT_PHASE1_ROOT / "task1_internal_vs_cross_common_scope_comparison.csv"
+DEFAULT_OUTPUT_PATH = Path(
+    "/mnt/NAS_21T/ProjectData/M2M/runs/manuscript_active/group_bridge/task1_internal_vs_cross_group_bridge.csv"
+)
 
-COMMON_SCOPE_REPRESENTATIONS = {"Gene", "Pathway"}
-COMMON_SCOPE_PERTURBATION_TYPE = "Genetic"
-
-LEADERBOARD_REQUIRED_COLUMNS = [
-    "scope",
-    "dataset_or_direction",
-    "perturbation_type",
-    "representation",
-    "metric_name",
-    "metric_value",
-    "n_total",
-    "n_valid",
-    "n_excluded",
-    "N_gallery_max",
-    "cross_alignment_contract",
-]
-SUMMARY_REQUIRED_COLUMNS = [
-    "scope",
-    "dataset_or_direction",
-    "perturbation_type",
-    "representation",
-    "n_total",
-    "n_valid",
-    "n_excluded_missing_metric_or_mpos0",
-    "N_gallery_max",
-    "mean_mrr_corrected",
-    "mean_hit1_corrected",
-    "mean_hit5_corrected",
-    "mean_hit10_corrected",
-]
-PER_QUERY_REQUIRED_COLUMNS = [
-    "scope",
-    "dataset_or_direction",
-    "perturbation_type",
-    "representation",
-    "query_uid",
-    "cell_line",
-    "target_token",
-    "N_gallery",
-    "N_gallery_max",
-    "m_pos",
+RETRIEVAL_METRICS = [
     "mrr_corrected",
     "hit1_corrected",
     "hit5_corrected",
     "hit10_corrected",
-    "loo_policy",
-    "cross_alignment_contract",
-]
-GROUP_CROSS_REQUIRED_COLUMNS = [
-    "scope",
-    "dataset_or_direction",
-    "perturbation_type",
-    "representation",
-    "group_id",
-    "cell_line",
-    "target_token",
-    "n_L",
-    "n_S",
-    "n_L_sub",
-    "n_S_sub",
-    "cosine",
-    "pcc",
-    "edist",
-    "cross_alignment_contract",
-]
-OUTPUT_COLUMNS = [
-    "representation",
-    "metric_name",
-    "internal_dataset_or_direction",
-    "cross_dataset_or_direction",
-    "perturbation_type",
-    "comparison_mode",
-    "internal_value",
-    "cross_value",
-    "delta_value",
-    "internal_n_total",
-    "internal_n_valid",
-    "cross_n_total",
-    "cross_n_valid",
-    "status",
-    "pairing_notes",
 ]
 
 
 def parse_args() -> argparse.Namespace:
-    """Parse CLI arguments for the A1 scaffold."""
-    parser = argparse.ArgumentParser(description="Phase 1 skeleton for A1 Task1 internal vs cross.")
+    parser = argparse.ArgumentParser(description="Build the A1 Task1 internal-vs-cross group bridge table.")
     parser.add_argument("--project-root", type=Path, default=ROOT)
-    parser.add_argument("--internal-leaderboard-path", type=Path, default=DEFAULT_INTERNAL_LEADERBOARD_PATH)
-    parser.add_argument("--internal-summary-path", type=Path, default=DEFAULT_INTERNAL_SUMMARY_PATH)
     parser.add_argument("--internal-per-query-path", type=Path, default=DEFAULT_INTERNAL_PER_QUERY_PATH)
-    parser.add_argument("--cross-leaderboard-path", type=Path, default=DEFAULT_CROSS_LEADERBOARD_PATH)
-    parser.add_argument("--cross-summary-path", type=Path, default=DEFAULT_CROSS_SUMMARY_PATH)
     parser.add_argument("--cross-per-query-path", type=Path, default=DEFAULT_CROSS_PER_QUERY_PATH)
-    parser.add_argument("--group-cross-path", type=Path, default=DEFAULT_GROUP_CROSS_PATH)
+    parser.add_argument("--task1-group-cross-path", type=Path, default=DEFAULT_TASK1_GROUP_CROSS_PATH)
     parser.add_argument("--output-path", type=Path, default=DEFAULT_OUTPUT_PATH)
+    parser.add_argument("--summary-output-path", type=Path, default=None)
     return parser.parse_args()
 
 
 def resolve_path(project_root: Path, raw_path: Path) -> Path:
-    """Resolve a CLI path against the requested project root."""
     return raw_path if raw_path.is_absolute() else (project_root / raw_path)
 
 
-def load_table(path: Path, label: str) -> pd.DataFrame:
-    """Load a CSV or parquet table without hidden fallback behavior."""
+def require_path(path: Path, label: str) -> None:
     if not path.exists():
         raise FileNotFoundError(f"{label} does not exist: {path}")
-    if path.suffix == ".csv":
-        return pd.read_csv(path)
-    if path.suffix == ".parquet":
-        return pd.read_parquet(path)
-    raise ValueError(f"{label} must be CSV or parquet, got: {path}")
 
 
-def maybe_load_table(path: Path, label: str) -> pd.DataFrame | None:
-    """Load an optional table when present; return None when absent."""
-    if not path.exists():
-        return None
-    return load_table(path, label)
+def derive_summary_output_path(output_path: Path) -> Path:
+    return output_path.with_name(f"{output_path.stem}_summary.csv")
 
 
-def ensure_required_columns(frame: pd.DataFrame, required: Iterable[str], label: str) -> None:
-    """Fail fast when a required frozen column is absent."""
-    missing = [column for column in required if column not in frame.columns]
-    if missing:
-        raise ValueError(f"{label} is missing required columns: {missing}")
+def init_metric_state() -> dict[str, float | int]:
+    state: dict[str, float | int] = {"n_queries": 0}
+    for metric_name in RETRIEVAL_METRICS:
+        state[f"{metric_name}_sum"] = 0.0
+        state[f"{metric_name}_count"] = 0
+    return state
 
 
-def ensure_non_null_columns(frame: pd.DataFrame, columns: list[str], label: str) -> None:
-    """Reject nulls in core scope columns rather than filling them silently."""
-    if frame[columns].isnull().any().any():
-        raise ValueError(f"{label} contains null values in required columns: {columns}")
+def update_state(
+    aggregate: dict[tuple[str, str, str, str], dict[str, float | int]],
+    batch_summary: pd.DataFrame,
+) -> None:
+    for row in batch_summary.itertuples(index=False):
+        key = (row.dataset, row.cell_line, row.target, row.representation_detail)
+        state = aggregate.setdefault(key, init_metric_state())
+        state["n_queries"] += int(row.n_queries)
+        for metric_name in RETRIEVAL_METRICS:
+            metric_sum = getattr(row, f"{metric_name}_sum")
+            metric_count = getattr(row, f"{metric_name}_count")
+            if not math.isnan(float(metric_sum)):
+                state[f"{metric_name}_sum"] += float(metric_sum)
+            state[f"{metric_name}_count"] += int(metric_count)
 
 
-def filter_to_common_scope(frame: pd.DataFrame) -> pd.DataFrame:
-    """
-    Apply only the coarse common-scope labels.
+def finalize_aggregate(
+    aggregate: dict[tuple[str, str, str, str], dict[str, float | int]],
+    n_queries_column: str,
+) -> pd.DataFrame:
+    rows: list[dict[str, object]] = []
+    for key, state in aggregate.items():
+        dataset, cell_line, target, representation_detail = key
+        row: dict[str, object] = {
+            "dataset": dataset,
+            "cell_line": cell_line,
+            "target": target,
+            "representation_detail": representation_detail,
+            n_queries_column: int(state["n_queries"]),
+        }
+        for metric_name in RETRIEVAL_METRICS:
+            metric_sum = float(state[f"{metric_name}_sum"])
+            metric_count = int(state[f"{metric_name}_count"])
+            row[metric_name] = metric_sum / metric_count if metric_count else pd.NA
+            row[f"{metric_name}_n_valid"] = metric_count
+        rows.append(row)
 
-    This is not the final lawful common-scope anchor. The later implementation
-    must retain only the reviewed cross-supported slice rather than relying on
-    broad labels alone.
-    """
-    return frame.loc[
-        frame["representation"].isin(COMMON_SCOPE_REPRESENTATIONS)
-        & frame["perturbation_type"].eq(COMMON_SCOPE_PERTURBATION_TYPE)
+    return pd.DataFrame(rows)
+
+
+def summarize_batch(frame: pd.DataFrame, dataset_mapper) -> pd.DataFrame:
+    frame = frame.loc[
+        frame["perturbation_type"].eq("Genetic")
+        & frame["representation"].isin(COMMON_REPRESENTATIONS)
     ].copy()
+    if frame.empty:
+        return pd.DataFrame()
+
+    frame["dataset"] = frame["dataset_or_direction"].map(dataset_mapper)
+    frame = frame.loc[frame["dataset"].notna()].copy()
+    if frame.empty:
+        return pd.DataFrame()
+
+    frame["target"] = frame["target_token"].astype(str)
+    frame["representation_detail"] = frame["representation"].astype(str)
+    grouped = frame.groupby(DETAIL_COLUMNS, dropna=False)
+    summary = grouped.size().rename("n_queries").to_frame()
+    for metric_name in RETRIEVAL_METRICS:
+        summary[f"{metric_name}_sum"] = grouped[metric_name].sum(min_count=1)
+        summary[f"{metric_name}_count"] = grouped[metric_name].count()
+    return summary.reset_index()
 
 
-def load_reviewed_inputs(args: argparse.Namespace, project_root: Path) -> dict[str, pd.DataFrame | None]:
-    """Load the reviewed local A1 inputs."""
-    return {
-        "internal_leaderboard": load_table(
-            resolve_path(project_root, args.internal_leaderboard_path),
-            "S1 internal leaderboard",
-        ),
-        "internal_summary": load_table(
-            resolve_path(project_root, args.internal_summary_path),
-            "S1 internal retrieval summary",
-        ),
-        "internal_per_query": maybe_load_table(
-            resolve_path(project_root, args.internal_per_query_path),
-            "S1 internal retrieval per-query",
-        ),
-        "cross_leaderboard": load_table(
-            resolve_path(project_root, args.cross_leaderboard_path),
-            "S2 cross leaderboard",
-        ),
-        "cross_summary": load_table(
-            resolve_path(project_root, args.cross_summary_path),
-            "S2 cross retrieval summary",
-        ),
-        "cross_per_query": load_table(
-            resolve_path(project_root, args.cross_per_query_path),
-            "S2 cross retrieval per-query",
-        ),
-        "group_cross": load_table(resolve_path(project_root, args.group_cross_path), "S2 group cross table"),
-    }
+def aggregate_retrieval_from_parquet(path: Path, dataset_mapper) -> pd.DataFrame:
+    require_path(path, f"retrieval parquet: {path.name}")
+    parquet_file = pq.ParquetFile(path)
+    columns = [
+        "dataset_or_direction",
+        "perturbation_type",
+        "representation",
+        "cell_line",
+        "target_token",
+        *RETRIEVAL_METRICS,
+    ]
+    aggregate: dict[tuple[str, str, str, str], dict[str, float | int]] = {}
+    for batch in parquet_file.iter_batches(batch_size=200_000, columns=columns):
+        batch_frame = batch.to_pandas()
+        batch_summary = summarize_batch(batch_frame, dataset_mapper)
+        if not batch_summary.empty:
+            update_state(aggregate, batch_summary)
+    frame = finalize_aggregate(aggregate, "n_queries")
+    if frame.empty:
+        return frame
+    return frame.sort_values(DETAIL_COLUMNS, kind="mergesort").reset_index(drop=True)
 
 
-def validate_inputs(inputs: dict[str, pd.DataFrame | None]) -> None:
-    """Run the reviewed schema checks that are safe to freeze now."""
-    ensure_required_columns(inputs["internal_leaderboard"], LEADERBOARD_REQUIRED_COLUMNS, "S1 internal leaderboard")
-    ensure_required_columns(inputs["internal_summary"], SUMMARY_REQUIRED_COLUMNS, "S1 internal retrieval summary")
-    ensure_required_columns(inputs["cross_leaderboard"], LEADERBOARD_REQUIRED_COLUMNS, "S2 cross leaderboard")
-    ensure_required_columns(inputs["cross_summary"], SUMMARY_REQUIRED_COLUMNS, "S2 cross retrieval summary")
-    ensure_required_columns(inputs["cross_per_query"], PER_QUERY_REQUIRED_COLUMNS, "S2 cross retrieval per-query")
-    ensure_required_columns(inputs["group_cross"], GROUP_CROSS_REQUIRED_COLUMNS, "S2 group cross table")
-
-    if inputs["internal_per_query"] is not None:
-        ensure_required_columns(inputs["internal_per_query"], PER_QUERY_REQUIRED_COLUMNS, "S1 internal retrieval per-query")
-
-    ensure_non_null_columns(
-        inputs["internal_summary"],
-        ["scope", "dataset_or_direction", "perturbation_type", "representation"],
-        "S1 internal retrieval summary",
+def restrict_to_shared_triplets(left: pd.DataFrame, right: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    shared_triplets = left[TRIPLET_COLUMNS].drop_duplicates().merge(
+        right[TRIPLET_COLUMNS].drop_duplicates(),
+        on=TRIPLET_COLUMNS,
+        how="inner",
+        validate="one_to_one",
     )
-    ensure_non_null_columns(
-        inputs["cross_summary"],
-        ["scope", "dataset_or_direction", "perturbation_type", "representation"],
-        "S2 cross retrieval summary",
+    if shared_triplets.empty:
+        return left.iloc[0:0].copy(), right.iloc[0:0].copy()
+    left_shared = left.merge(shared_triplets, on=TRIPLET_COLUMNS, how="inner")
+    right_shared = right.merge(shared_triplets, on=TRIPLET_COLUMNS, how="inner")
+    return left_shared, right_shared
+
+
+def conservative_group_support(*values: object) -> object:
+    finite = [int(value) for value in values if pd.notna(value)]
+    if not finite:
+        return pd.NA
+    return min(finite)
+
+
+def build_retrieval_bridge_rows(internal_summary: pd.DataFrame, cross_summary: pd.DataFrame) -> list[dict[str, object]]:
+    internal_shared, cross_shared = restrict_to_shared_triplets(internal_summary, cross_summary)
+    merged = internal_shared.merge(
+        cross_shared,
+        on=DETAIL_COLUMNS,
+        how="inner",
+        suffixes=("_internal", "_cross"),
+        validate="one_to_one",
+    )
+
+    rows: list[dict[str, object]] = []
+    for row in merged.itertuples(index=False):
+        for metric_name in RETRIEVAL_METRICS:
+            internal_value = getattr(row, f"{metric_name}_internal")
+            cross_value = getattr(row, f"{metric_name}_cross")
+            rows.append(
+                {
+                    "dataset": row.dataset,
+                    "cell_line": row.cell_line,
+                    "target": row.target,
+                    "representation_detail": row.representation_detail,
+                    "metric_family": "retrieval_corrected",
+                    "metric_name": metric_name,
+                    "internal_value": internal_value,
+                    "cross_value": cross_value,
+                    "cross_minus_internal": (
+                        cross_value - internal_value
+                        if pd.notna(internal_value) and pd.notna(cross_value)
+                        else pd.NA
+                    ),
+                    "comparison_scope": "dataset_cell_line_target_group_bridge",
+                    "support_n_internal": row.n_queries_internal,
+                    "support_n_cross": row.n_queries_cross,
+                    "internal_support_detail": f"n_queries={row.n_queries_internal}",
+                    "cross_support_detail": f"n_queries={row.n_queries_cross}",
+                    "internal_n_valid": getattr(row, f"{metric_name}_n_valid_internal"),
+                    "cross_n_valid": getattr(row, f"{metric_name}_n_valid_cross"),
+                    "provenance_note": (
+                        "Task1 internal retrieval values are grouped corrected genetic-query "
+                        "means over shared triplets; Task1 cross retrieval values use the same "
+                        "triplet universe after source-dataset mapping. "
+                        f"representation_detail={row.representation_detail} is retained only as source detail."
+                    ),
+                }
+            )
+    return rows
+
+
+def build_group_bridge_rows(internal_group: pd.DataFrame, cross_group: pd.DataFrame) -> list[dict[str, object]]:
+    internal_shared, cross_shared = restrict_to_shared_triplets(internal_group, cross_group)
+    merged = internal_shared.merge(
+        cross_shared,
+        on=DETAIL_COLUMNS,
+        how="inner",
+        suffixes=("_internal", "_cross"),
+        validate="one_to_one",
+    )
+
+    rows: list[dict[str, object]] = []
+    for row in merged.itertuples(index=False):
+        for metric_name in GROUP_METRICS:
+            internal_value = getattr(row, f"{metric_name}_internal")
+            cross_value = getattr(row, f"{metric_name}_cross")
+            rows.append(
+                {
+                    "dataset": row.dataset,
+                    "cell_line": row.cell_line,
+                    "target": row.target,
+                    "representation_detail": row.representation_detail,
+                    "metric_family": "group_concordance",
+                    "metric_name": metric_name,
+                    "internal_value": internal_value,
+                    "cross_value": cross_value,
+                    "cross_minus_internal": (
+                        cross_value - internal_value
+                        if pd.notna(internal_value) and pd.notna(cross_value)
+                        else pd.NA
+                    ),
+                    "comparison_scope": "dataset_cell_line_target_group_bridge",
+                    "support_n_internal": conservative_group_support(row.n_A, row.n_B),
+                    "support_n_cross": conservative_group_support(row.n_L, row.n_S),
+                    "internal_support_detail": (
+                        f"n_total={row.n_total};n_A={row.n_A};n_B={row.n_B};"
+                        f"n_A_sub={row.n_A_sub};n_B_sub={row.n_B_sub}"
+                    ),
+                    "cross_support_detail": (
+                        f"pair_direction={row.task1_pair_direction};n_L={row.n_L};n_S={row.n_S};"
+                        f"n_L_sub={row.n_L_sub};n_S_sub={row.n_S_sub}"
+                    ),
+                    "internal_n_valid": int(pd.notna(internal_value)),
+                    "cross_n_valid": int(pd.notna(cross_value)),
+                    "provenance_note": (
+                        "Task1 internal group metrics use the existing S1 split-half group logic "
+                        "recomputed from the frozen Task1 snapshot; Task1 cross group metrics come "
+                        "from S2 cross-group rows duplicated onto each paired dataset only after "
+                        "the shared triplet universe is fixed. "
+                        f"representation_detail={row.representation_detail} is retained only as source detail."
+                    ),
+                }
+            )
+    return rows
+
+
+def build_bridge_table(
+    internal_retrieval: pd.DataFrame,
+    cross_retrieval: pd.DataFrame,
+    internal_group: pd.DataFrame,
+    cross_group: pd.DataFrame,
+) -> pd.DataFrame:
+    rows: list[dict[str, object]] = []
+    rows.extend(build_retrieval_bridge_rows(internal_retrieval, cross_retrieval))
+    rows.extend(build_group_bridge_rows(internal_group, cross_group))
+    if not rows:
+        raise ValueError("A1 bridge produced no lawful shared `(dataset, cell_line, target)` rows.")
+
+    return (
+        pd.DataFrame(rows)
+        .sort_values(
+            ["dataset", "cell_line", "target", "metric_family", "metric_name", "representation_detail"],
+            kind="mergesort",
+        )
+        .reset_index(drop=True)
     )
 
 
-def build_internal_cross_comparison(inputs: dict[str, pd.DataFrame | None]) -> pd.DataFrame:
-    """
-    Build the future A1 comparison table.
-
-    The scaffold applies only a coarse common-scope prefilter and does not yet
-    decide whether exact pairing is supported from the frozen local outputs.
-    """
-    internal_summary = filter_to_common_scope(inputs["internal_summary"])
-    cross_summary = filter_to_common_scope(inputs["cross_summary"])
-    internal_per_query = None
-    if inputs["internal_per_query"] is not None:
-        internal_per_query = filter_to_common_scope(inputs["internal_per_query"])
-    cross_per_query = filter_to_common_scope(inputs["cross_per_query"])
-    group_cross = filter_to_common_scope(inputs["group_cross"])
-
-    if internal_summary.empty:
-        raise ValueError("S1 internal summary has no common-scope rows after lawful filtering")
-    if cross_summary.empty:
-        raise ValueError("S2 cross summary has no common-scope rows after lawful filtering")
-    if group_cross.empty:
-        raise ValueError("S2 group cross table has no common-scope rows after lawful filtering")
-
-    _ = internal_per_query
-    _ = cross_per_query
-
-    # TODO: Anchor the final lawful common-scope slice to the reviewed
-    # cross-supported slice. The broad `Gene`/`Pathway` plus `Genetic` filter is
-    # only a coarse prefilter and is not sufficient by itself.
-    #
-    # TODO: Review whether current frozen per-query outputs support lawful exact
-    # pairing on a shared query identity. The planning docs prefer exact pairing,
-    # but this scaffold must not assume exact pairing merely because an optional
-    # internal per-query table happens to be present.
-    #
-    # TODO: If exact pairing is lawful, build rows labeled
-    # `comparison_mode=exact_pairing`.
-    #
-    # TODO: If exact pairing is unavailable because the optional internal
-    # per-query input is absent, schema-incompatible, or otherwise insufficient,
-    # degrade only to an explicit summary fallback and label rows as
-    # `comparison_mode=summary_fallback`.
-    #
-    # TODO: Do not infer exactness from summary coincidences, and do not invent
-    # pseudo-pairs from unmatched denominators.
-    return pd.DataFrame(columns=OUTPUT_COLUMNS)
-
-
-def write_output(frame: pd.DataFrame, output_path: Path) -> None:
-    """Write the manuscript-support comparison table."""
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    frame.to_csv(output_path, index=False)
+def build_summary_table(bridge_table: pd.DataFrame) -> pd.DataFrame:
+    summary_source = bridge_table.loc[
+        bridge_table[["internal_value", "cross_value", "cross_minus_internal"]].notna().all(axis=1)
+    ].copy()
+    summary = (
+        summary_source.groupby(
+            ["metric_family", "metric_name", "dataset", "cell_line", "representation_detail"],
+            dropna=False,
+            observed=True,
+            sort=True,
+        )
+        .agg(
+            n_groups=("target", "size"),
+            internal_mean=("internal_value", "mean"),
+            cross_mean=("cross_value", "mean"),
+            delta_mean=("cross_minus_internal", "mean"),
+            delta_median=("cross_minus_internal", "median"),
+        )
+        .reset_index()
+    )
+    return summary[
+        [
+            "metric_name",
+            "dataset",
+            "cell_line",
+            "n_groups",
+            "internal_mean",
+            "cross_mean",
+            "delta_mean",
+            "delta_median",
+            "metric_family",
+            "representation_detail",
+        ]
+    ]
 
 
 def main() -> int:
-    """Run the A1 skeleton through loading, validation, and placeholder output."""
     args = parse_args()
-    project_root = resolve_path(Path.cwd(), args.project_root)
-    inputs = load_reviewed_inputs(args, project_root)
-    validate_inputs(inputs)
-    output = build_internal_cross_comparison(inputs)
-    write_output(output, resolve_path(project_root, args.output_path))
+    project_root = args.project_root.resolve()
+    internal_path = resolve_path(project_root, args.internal_per_query_path)
+    cross_path = resolve_path(project_root, args.cross_per_query_path)
+    task1_group_cross_path = resolve_path(project_root, args.task1_group_cross_path)
+    output_path = resolve_path(project_root, args.output_path)
+    summary_output_path = (
+        resolve_path(project_root, args.summary_output_path)
+        if args.summary_output_path is not None
+        else derive_summary_output_path(output_path)
+    )
+
+    internal_retrieval = aggregate_retrieval_from_parquet(internal_path, lambda value: value)
+    cross_retrieval = aggregate_retrieval_from_parquet(cross_path, source_dataset_from_cross_direction)
+    require_path(task1_group_cross_path, "Task1 cross group parquet")
+    cross_group = load_task1_cross_group_metrics(task1_group_cross_path)
+    internal_group = compute_task1_internal_group_metrics(
+        project_root,
+        allowed_triplets=cross_group[TRIPLET_COLUMNS].drop_duplicates(),
+    )
+
+    bridge_table = build_bridge_table(
+        internal_retrieval=internal_retrieval,
+        cross_retrieval=cross_retrieval,
+        internal_group=internal_group,
+        cross_group=cross_group,
+    )
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    bridge_table.to_csv(output_path, index=False)
+    summary_output_path.parent.mkdir(parents=True, exist_ok=True)
+    summary_table = build_summary_table(bridge_table)
+    summary_table.to_csv(summary_output_path, index=False)
+
+    print(f"Wrote {len(bridge_table):,} A1 bridge rows to {output_path}")
+    print(f"Wrote {len(summary_table):,} A1 summary rows to {summary_output_path}")
+    print("Shared triplets:", bridge_table[TRIPLET_COLUMNS].drop_duplicates().shape[0])
     return 0
 
 
