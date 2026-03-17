@@ -1,263 +1,125 @@
-# avcp-template
+# M2M-Bench
 
-Template repository for AVCP-based agentic development.
+M2M-Bench is an audit-oriented benchmark for perturbation-response concordance across two locked tasks:
 
-<!-- AVCP:README:START -->
-## AVCP Template
+- `Task1` evaluates modality concordance with frozen `internal` and `cross` scopes.
+- `Task2` evaluates mechanism concordance with corrected multisource core metrics stratified by `dataset` and `cell_line`.
 
-Research engineering starter with AVCP prompts, repo-memory docs, and enforced bridge contracts.
+Local contracts in `docs/contracts/` and governance documents in `docs/governance/` are the source of truth for scope. The older public AVCP-template metadata is superseded by the local files in this repository.
 
-> [!TIP]
-> AVCP = **Repo-as-Memory** for AI engineering. Keep truth in versioned files, not chat context.
+## Current Project State
 
-AVCP (Agentic Version Control Protocol) is a practical operating model for building software with coding agents (Codex / Claude Code / Cursor) under explicit, testable contracts.
+- Project objective:
+  deliver an audit-grade benchmark for Task1 modality concordance and Task2 mechanism concordance across LINCS and scPerturb, with FM analyses treated as representation-space complements rather than a third primary task.
+- Locked Task1 scope:
+  `docs/governance/state.md`, `docs/governance/constraints.md`, and `docs/contracts/task1_spec.md` lock Task1 to `data/task1_snapshot_v1/`, with internal analyses on frozen eligible LINCS and scPerturb cohorts and cross analyses restricted to the frozen LINCS↔scPerturb matched contract.
+- Locked Task2 scope:
+  `docs/contracts/task2_spec.md` locks corrected Task2 to `mech_key=(dataset, cell_line, target_token)`, requires multisource core metrics from both `LINCS` and `scPerturb`, keeps `data/task2_snapshot_v1/` as legacy/interim scPerturb-K562 evidence, and limits FM representations to the scPerturb K562 subset.
+- Current active pipelines:
+  `scripts/s0_build_data_inventory.py`, `scripts/s1_task1_internal_metrics.py`, `scripts/s2_task1_cross_metrics.py`, `scripts/s3_build_task2_multisource_snapshot.py`, `scripts/s4_task2_group_concordance_multisource.py`, `scripts/s5_task2_retrieval_multisource.py`, `scripts/s6_task2_result_synthesis_multisource.py`, and `scripts/s7_project_benchmark_synthesis.py`.
+- Completed stages with local audit evidence:
+  `S0` (`runs/s0_build_data_inventory_0303/s0_build_data_inventory/`, 7/7 assertions passed), `S1` (`runs/s1_task1_internal_metrics_0303/s1_task1_internal_metrics/`, 7/8 passed with one non-blocking soft FM-policy note), `S2` (`runs/s2_task1_cross_metrics_0303/s2_task1_cross_metrics/`, 9/9 passed), legacy/interim `Task2 S3` (`runs/s3_build_task2_data_0305/s3_build_task2_snapshot/`, 7/7 passed), Task2 K562 FM extractors (`runs/fm_*` plus `runs/0303/extract_state/`, all audited), corrected multisource `S3` (`runs/0310_fix_1hae/s3_build_task2_multisource_snapshot/`, 14/14 passed), corrected multisource `S4` (`runs/s4_multisource_impl_verify_20260310_c/s4_task2_group_concordance_multisource/`, 14/14 passed), corrected multisource `S5` (`runs/s5_multisource_impl_verify_20260311_a/s5_task2_retrieval_multisource/`, 15/15 passed), and corrected multisource `S6` (`runs/s6_multisource_impl_verify_20260311_a/s6_task2_result_synthesis_multisource/`, 11/11 passed).
+- Implemented project-level synthesis:
+  `S7` is now implemented as `scripts/s7_project_benchmark_synthesis.py`, with authoritative implcheck evidence at `runs/s7_project_benchmark_synthesis_implcheck_20260311_a/s7_project_benchmark_synthesis/`.
+- Storage state:
+  authoritative active results are now NAS-backed under `/mnt/NAS_21T/ProjectData/M2M/runs`, historical results are archived under `/mnt/NAS_21T/ProjectData/M2M/archive/runs`, local `runs/` intentionally remains a real directory, and local project-path compatibility is preserved via run-id-level symlinks under `runs/` plus a root `reports` symlink. See `docs/governance/local_storage_policy.md`.
+- Pending or not yet evidenced:
+  no `runs/**/*_key_summary.csv` files were found, so current status summaries come from manifests, audit assertions, and stage tables rather than key-summary CSVs.
+- Authoritative output artifacts:
+  `runs/<run_id>/s0_build_data_inventory/task1_data_inventory_long.csv`,
+  `runs/<run_id>/s0_build_data_inventory/data_source_manifest.csv`,
+  `runs/<run_id>/s1_task1_internal_metrics/task1_retrieval_per_query.parquet`,
+  `runs/<run_id>/s1_task1_internal_metrics/task1_retrieval_summary.csv`,
+  `runs/<run_id>/s1_task1_internal_metrics/task1_chance_identity_check.csv`,
+  `runs/<run_id>/s1_task1_internal_metrics/task1_leaderboard_long.csv`,
+  `runs/<run_id>/s1_task1_internal_metrics/task1_attrition.csv`,
+  `runs/<run_id>/s2_task1_cross_metrics/task1_group_cross.parquet`,
+  `runs/<run_id>/s2_task1_cross_metrics/task1_cross_retrieval_summary.csv`,
+  `runs/<run_id>/s2_task1_cross_metrics/task1_cross_alignment_proof.csv`,
+  `data/task2_snapshot_v2/snapshot_manifest.json`,
+  `data/task2_snapshot_v2/task2_pairs_coverage.csv`,
+  `data/task2_snapshot_v2/representation_availability_registry.csv`,
+  `runs/<run_id>/s4_task2_group_concordance_multisource/task2_group_concordance.csv`,
+  `runs/<run_id>/s4_task2_group_concordance_multisource/task2_group_attrition.csv`,
+  `runs/<run_id>/s5_task2_retrieval_multisource/task2_retrieval_per_query.parquet`,
+  `runs/<run_id>/s5_task2_retrieval_multisource/task2_retrieval_summary.csv`,
+  `runs/<run_id>/s5_task2_retrieval_multisource/task2_retrieval_summary_long.csv`,
+  `runs/<run_id>/s5_task2_retrieval_multisource/task2_retrieval_attrition.csv`,
+  `runs/<run_id>/s5_task2_retrieval_multisource/task2_chance_identity_check.csv`,
+  `runs/<run_id>/s6_task2_result_synthesis_multisource/task2_group_concordance_long.csv`,
+  `runs/<run_id>/s6_task2_result_synthesis_multisource/task2_group_leaderboard.csv`,
+  `runs/<run_id>/s6_task2_result_synthesis_multisource/task2_retrieval_leaderboard.csv`,
+  `runs/<run_id>/s6_task2_result_synthesis_multisource/task2_benchmark_summary_long.csv`,
+  `runs/<run_id>/s7_project_benchmark_synthesis/project_input_registry.csv`,
+  `runs/<run_id>/s7_project_benchmark_synthesis/project_benchmark_summary_long.csv`,
+  `runs/<run_id>/s7_project_benchmark_synthesis/project_axis_score_inputs_long.csv`,
+  `runs/<run_id>/s7_project_benchmark_synthesis/project_representation_scorecard.csv`.
 
-### ✨ Why AVCP
+## Script Inventory
 
-| Risk | Typical symptom | AVCP control |
-|---|---|---|
-| 🧠 Context amnesia | decisions disappear across sessions | `docs/state.md` + `docs/decisions.md` |
-| 🎭 Hallucinated implementation | invented contracts, guessed logic | tier gates + specs-first workflow |
-| 🤫 Silent failures | pipelines "succeed" with wrong outputs | fail-fast validation + manifests |
-| 📄 Docs drift | README/changelog become stale | generated README + safe changelog updates |
+### Current pipeline scripts
 
-### 🗂 Repository Layout
+- `scripts/s0_build_data_inventory.py`: Task1 data inventory build from `data/task1_snapshot_v1/`.
+- `scripts/s1_task1_internal_metrics.py`: Task1 internal group-level concordance and retrieval.
+- `scripts/s2_task1_cross_metrics.py`: Task1 frozen cross-contract metrics and eligibility-gated retrieval.
+- `scripts/s3_build_task2_multisource_snapshot.py`: corrected multisource Task2 snapshot materialization under `data/task2_snapshot_v2/`.
+- `scripts/s4_task2_group_concordance_multisource.py`: corrected Task2 group concordance.
+- `scripts/s5_task2_retrieval_multisource.py`: corrected Task2 target-level retrieval with multi-positive chance correction.
+- `scripts/s6_task2_result_synthesis_multisource.py`: corrected Task2 leaderboard and benchmark summary synthesis.
+- `scripts/s7_project_benchmark_synthesis.py`: project-level benchmark synthesis above Task1 S0-S2 and corrected Task2 S3-S6.
 
-```text
-prompts/                 # pinned system prompt
-config/                  # runtime configuration source-of-truth
-docs/                    # memory, constraints, decisions, contracts
-src/avcp_template/       # installable package
-scripts/dev/             # README/changelog maintenance tooling
-tests/                   # verification suite
-```
+### Preserved historical/supporting scripts
 
-## 🧠 AVCP Operating Contracts
+- `scripts/s3_build_task2_snapshot.py`
+- `scripts/s4_task2_group_concordance.py`
+- `scripts/s5_task2_retrieval.py`
+- `scripts/s6_task2_result_synthesis.py`
+- `scripts/fm_extractors/extract_scgpt.py`
+- `scripts/fm_extractors/extract_geneformer.py`
+- `scripts/fm_extractors/extract_scbert.py`
+- `scripts/fm_extractors/extract_scfoundation.py`
+- `scripts/fm_extractors/extract_uce.py`
+- `scripts/fm_extractors/extract_state.py`
+- `scripts/fm_extractors/extract_tahoex1.py`
 
-### 1) Agent cognition contract
-- Use `prompts/AVCP_SYSTEM_PROMPT_MIN.md` as the pinned operating protocol.
-- Start each coding session by loading:
-  - `docs/state.md`
-  - `docs/constraints.md`
-  - `docs/decisions.md`
-  - `docs/api_specs.md`
-  - `docs/data_contracts.md`
-  - `docs/avcp_guidelines.md`
+### Package surface
 
-### 2) Configuration contract
-- Runtime paths/parameters must come from `config/config.yaml`.
-- Hardcoded paths are contract violations.
+The installable package is currently minimal: `src/m2mbench/metrics/`, `src/m2mbench/utils/`, and `src/m2mbench/utils/logging.py`. Most benchmark workflow logic currently lives in `scripts/`.
 
-### 3) Data handoff contract
-- Use `src/avcp_template/io/bridge.py::save_for_r()` for Python->R handoffs.
-- Require explicit primary key + `<stem>_meta.json` sidecar.
-
-### 4) Documentation contract
-- `README.md` is derived from `project.yaml` + `docs/readme.template.md`.
-- Changelog updates go through `scripts/dev/update_changelog.py` only.
-
-### 5) Role + evidence contract
-- AI must remain objective: no flattery, no fabricated conclusions.
-- Non-trivial conclusions must include explicit evidence and uncertainty.
-- Reference: `docs/avcp_guidelines.md#4.2 AI Role Positioning: Objectivity and Evidence`.
-
-## 🚀 Scenario A: Start a New Project
-
-### A1. Local bootstrap (human)
-
-```bash
-python -m pip install -e ".[dev]"
-ruff check .
-ruff format --check .
-mypy .
-pytest -q
-python scripts/dev/generate_readme.py --check
-```
-
-### A2. First agent prompt (copy-paste)
-
-```text
-Read and enforce prompts/AVCP_SYSTEM_PROMPT_MIN.md.
-Before coding, read docs/state.md, docs/constraints.md, docs/decisions.md,
-docs/api_specs.md, docs/data_contracts.md, docs/avcp_guidelines.md.
-Reply with:
-1) [STATE SNAPSHOT]
-2) [PLAN]
-3) [PATCH SET]
-4) [TEST]
-5) [EVIDENCE]
-No invented claims. If uncertain, escalate via gates.
-```
-
-### A3. Initialize project metadata
-
-Ask the agent to:
-1. update `project.yaml` (`name`, `title`, `domain`, `stage`, `owner`, `license`, `entrypoints`),
-2. update sprint context in `docs/state.md`,
-3. regenerate README via `python scripts/dev/generate_readme.py`.
-
-### A4. Daily delivery loop
-
-1. **Lock intent first**
-- Tier-1/Tier-2 changes update docs/specs before code.
-
-2. **Implement in small patches**
-- Scripts under `scripts/` follow `docs/avcp_guidelines.md#4.1 Script Header Contract`.
-
-3. **Verify before commit**
-- Run lint/type/test/README checks.
-
-4. **Record change safely**
-
-```bash
-python scripts/dev/update_changelog.py --entry "feat(scope): concise description"
-```
-
-5. **Commit with Conventional Commits**
-- Example: `fix(bridge): enforce primary-key uniqueness on export`.
-
-## 🛠 Scenario B: Migrate an Existing Project
-
-### B0. Pick migration strategy
-
-Choose one:
-1. docs-first (recommended),
-2. config-hardening,
-3. full contract migration.
-
-### B1. Inject AVCP skeleton
-
-Copy into the existing repository root:
-1. `prompts/`
-2. `docs/`
-3. `config/`
-4. `scripts/dev/`
-
-### B2. Migration prompt (copy-paste)
-
-```text
-This repository is migrating to AVCP.
-Read prompts/AVCP_SYSTEM_PROMPT_MIN.md and docs/avcp_guidelines.md first.
-Produce a docs-first migration snapshot:
-- current state -> docs/state.md
-- hard constraints -> docs/constraints.md
-- open design decisions -> docs/decisions.md
-No large refactor in this step.
-```
-
-### B3. Extract hardcoded runtime config (Tier-1)
-
-Ask the agent to:
-1. scan `src/` for hardcoded paths/parameters,
-2. move them to `config/config.yaml`,
-3. add fail-fast validation,
-4. update `docs/api_specs.md` / `docs/data_contracts.md` if behavior/schema changes.
-
-### B4. Standardize data output contracts
-
-For cross-stage outputs:
-1. adopt `save_for_r()` pattern or equivalent wrapper,
-2. enforce primary key + schema/provenance sidecar,
-3. document schemas in `docs/data_contracts.md`.
-
-### B5. Turn on derived-doc workflow
-
-```bash
-python scripts/dev/generate_readme.py
-python scripts/dev/generate_readme.py --check
-```
-
-Then enforce this in CI/pre-commit.
-
-### B6. Migration done criteria
-
-Migration is complete when:
-1. startup prompt is repeatable,
-2. decisions/constraints/specs are current in `docs/`,
-3. runtime config is centralized in `config/config.yaml`,
-4. output contracts are explicit and testable,
-5. CI passes lint/type/test/README checks.
-
-## 📋 Prompt Pack (Fast Reuse)
-
-### Tier-0/1 implementation
-
-```text
-Consult docs/avcp_guidelines.md first.
-Implement <feature> as Tier-1:
-- update docs/specs for interface/schema changes,
-- provide unified diff,
-- run ruff + mypy + pytest,
-- update changelog via scripts/dev/update_changelog.py.
-```
-
-### Tier-2 proposal (before coding)
-
-```text
-This is Tier-2.
-Do not code yet.
-Write assumptions, formal logic, pseudo-code, and validation plan in docs/decisions.md.
-After human lock, implement with tests.
-```
-
-### Evidence-first reporting
-
-```text
-For each conclusion provide:
-1) conclusion,
-2) evidence list (files/outputs/metrics),
-3) confidence,
-4) unresolved uncertainty + next verification action.
-Do not output unsupported conclusions.
-```
-
-## ⚠️ Common Pitfalls and Controls
-
-| Pitfall | Control |
-|---|---|
-| Chat-only decisions | persist accepted decisions to `docs/decisions.md` |
-| Silent fallback behavior | fail-fast + explicit warnings + manifest fields |
-| Schema drift | update `docs/data_contracts.md` in same patch |
-| README drift | edit `project.yaml` / `docs/readme.template.md` then regenerate |
-| Script ambiguity | enforce `4.1 Script Header Contract` |
-| Unsupported claims | enforce evidence-linked conclusions (`4.2`) |
-
-## ✅ Recommended Commands
+## Representative Entrypoints
 
 ```bash
 python -m pip install -e ".[dev]"
-ruff check .
-ruff format --check .
-mypy .
-pytest -q
-python scripts/dev/generate_readme.py --check
-python scripts/dev/update_changelog.py --entry "chore(docs): update guide"
+python scripts/s0_build_data_inventory.py --run-id <run_id> --seed 619
+python scripts/s1_task1_internal_metrics.py --run-id <run_id> --seed 619
+python scripts/s2_task1_cross_metrics.py --run-id <run_id> --seed 619
+python scripts/s3_build_task2_multisource_snapshot.py --run-id <run_id> --seed 619
+python scripts/s4_task2_group_concordance_multisource.py --run-id <run_id> --seed 619
+python scripts/s5_task2_retrieval_multisource.py --run-id <run_id> --seed 619
+python scripts/s6_task2_result_synthesis_multisource.py --run-id <run_id> --seed 619
+python scripts/s7_project_benchmark_synthesis.py --run-id <run_id> --seed 619
 ```
 
-## 📌 Project At A Glance
+## Known Public Repo Drift
 
-- **Name:** `avcp-template`
-- **Domain:** Agentic research engineering
-- **Stage:** Data / Pipeline / Analysis / Manuscript
-- **Owner:** TODO-owner
-- **License:** TODO-license
+- The previous public `README.md` and `project.yaml` described this repository as `avcp-template`; the local source of truth identifies it as `m2m-bench`.
+- No local authoritative owner field or license file was found, so public metadata is currently marked as `unknown` rather than guessed.
+- No `runs/**/*_key_summary.csv` files were found in the local tree. Current status summaries are therefore derived from `run_manifest.json`, `audit_assertions.json`, and the stage tables they reference.
 
-## ⚙️ Entrypoints
+## Storage Layout
 
-- `python -m pip install -e ".[dev]"`
-- `pytest -q`
-- `python scripts/dev/generate_readme.py --check`
-## 📦 Outputs
+- Active authoritative run storage:
+  `/mnt/NAS_21T/ProjectData/M2M/runs`
+- Archived historical run storage:
+  `/mnt/NAS_21T/ProjectData/M2M/archive/runs`
+- Archived reports storage:
+  `/mnt/NAS_21T/ProjectData/M2M/archive/reports`
+- Local compatibility behavior:
+  `runs/` intentionally remains a local directory, `runs/<run_id>` entry points are symlinks spanning the NAS active and NAS archive namespaces, and `reports` is a root symlink to the NAS archive path. Root-level `runs` normalization is not the current strategy.
 
-- `data/interim_viz/*.parquet`
-- `data/interim_viz/*.csv`
-- `data/interim_viz/*_meta.json`
-## 🔗 AVCP References
+## Version
 
-- Pinned system prompt: `prompts/AVCP_SYSTEM_PROMPT_MIN.md`
-- Guidelines and gates: `docs/avcp_guidelines.md`
-<!-- AVCP:README:END -->
+- Package version: `0.4.0` (`pyproject.toml`)
+- Repository version note: `v0.4.0` (`VERSION.md`)
 
-## Notes
-
-This repository follows AVCP repo-as-memory conventions with docs and config as source-of-truth artifacts.
+The previous `VERSION.md` reboot note said Task2 was not yet frozen. That is superseded by the current corrected Task2 contracts and audited multisource S3-S6 runs.
