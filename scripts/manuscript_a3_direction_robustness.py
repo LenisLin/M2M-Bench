@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Phase 1 manuscript-support skeleton for A3: Task2 direction robustness.
+Conservative manuscript-support builder for A3: Task2 direction robustness.
 
 Analysis purpose:
 - Audit direction-specific Task2 retrieval support without collapsing `C2G`
@@ -36,11 +36,10 @@ Intended output semantics:
 - output rows carry status and provenance notes when a slice is partial,
   unavailable, or blocked
 
-What remains TODO in later implementation:
-- freeze the final reviewed robustness-slice labels
-- build denominator-conserving robustness slices from S5 per-query evidence
-- carry chance-check coverage onto the exact audited slice keys
-- decide which partial-output rows are lawful for still-unreviewed slice logic
+Deliberately out of scope here:
+- widening beyond the reviewed direction-specific slice contract
+- inventing additional robustness sub-slices that are not frozen locally
+- mutating upstream S5/S6 outputs
 """
 
 from __future__ import annotations
@@ -363,7 +362,7 @@ def validate_per_query_against_summary(summary: pd.DataFrame, observed: pd.DataF
 
 
 def load_reviewed_inputs(args: argparse.Namespace, project_root: Path) -> dict[str, pd.DataFrame]:
-    """Load the reviewed frozen inputs used by the A3 scaffold."""
+    """Load the reviewed frozen inputs used by the retained A3 builder."""
     return {
         "summary": load_table(resolve_path(project_root, args.summary_path), "S5 retrieval summary"),
         "per_query": load_table(resolve_path(project_root, args.per_query_path), "S5 retrieval per-query"),
@@ -470,7 +469,7 @@ def write_output(frame: pd.DataFrame, output_path: Path) -> None:
 
 
 def main() -> int:
-    """Run the A3 skeleton through input loading, validation, and placeholder output."""
+    """Run the retained A3 builder through input loading, validation, and output writing."""
     args = parse_args()
     project_root = resolve_path(Path.cwd(), args.project_root)
     inputs = load_reviewed_inputs(args, project_root)
