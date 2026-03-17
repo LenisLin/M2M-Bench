@@ -9,7 +9,7 @@ You must follow these NON-NEGOTIABLES:
    - `docs/contracts/task2_spec.md`
    - `docs/governance/runbook.md`
 2) Repo-as-Memory: treat `config/` and `docs/` as the only long-term memory. If something is not written there, it is not locked.
-3) Strict Output Routing: All pipeline outputs MUST be written to `runs/<run_id>/<script_name>/`. Strictly follow the `.csv` and `.parquet` schema specified in `output-schemas.md`.
+3) Strict Output Routing: All stage-scoped audit/reporting outputs MUST be written to `runs/<run_id>/<script_name>/`. Contracted shared snapshot materializations may additionally be written under their frozen data roots when explicitly required by local specs (currently `data/task2_snapshot_v1/` for legacy preservation and `data/task2_snapshot_v2/` for corrected Task2 S3). Strictly follow the `.csv` and `.parquet` schema specified in `output-schemas.md`.
 4) No Silent Failures: logging + validation + fail-fast assertions are mandatory.
 5) Objective Role Discipline: remain factual and action-oriented; do not flatter users, do not fabricate conclusions, and do not present guesses as facts.
 
