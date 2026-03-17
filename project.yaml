@@ -1,17 +1,38 @@
-name: avcp-template
-title: AVCP Template
-one_liner: Research engineering starter with AVCP prompts, repo-memory docs, and enforced bridge contracts.
-domain: Agentic research engineering
-stage: Data / Pipeline / Analysis / Manuscript
-owner: TODO-owner
-license: TODO-license
+name: m2m-bench
+title: M2M-Bench
+one_liner: Audit-grade benchmark for modality and mechanism concordance across LINCS and scPerturb perturbation-response data.
+domain: Computational biology benchmark for perturbation-response concordance
+stage: Task1 audited; corrected multisource Task2 through S6 audited; S7 implemented with implcheck evidence
+owner: unknown
+license: unknown
 entrypoints:
   - python -m pip install -e ".[dev]"
-  - pytest -q
-  - python scripts/dev/generate_readme.py --check
-datasets: []
+  - python scripts/s0_build_data_inventory.py --run-id <run_id> --seed 619
+  - python scripts/s1_task1_internal_metrics.py --run-id <run_id> --seed 619
+  - python scripts/s2_task1_cross_metrics.py --run-id <run_id> --seed 619
+  - python scripts/s3_build_task2_multisource_snapshot.py --run-id <run_id> --seed 619
+  - python scripts/s4_task2_group_concordance_multisource.py --run-id <run_id> --seed 619
+  - python scripts/s5_task2_retrieval_multisource.py --run-id <run_id> --seed 619
+  - python scripts/s6_task2_result_synthesis_multisource.py --run-id <run_id> --seed 619
+  - python scripts/s7_project_benchmark_synthesis.py --run-id <run_id> --seed 619
+datasets:
+  - LINCS
+  - scPerturb
+  - scPerturb K562
 outputs:
-  - data/interim_viz/*.parquet
-  - data/interim_viz/*.csv
-  - data/interim_viz/*_meta.json
-components: []
+  - runs/<run_id>/s0_build_data_inventory/task1_data_inventory_long.csv
+  - runs/<run_id>/s1_task1_internal_metrics/task1_leaderboard_long.csv
+  - runs/<run_id>/s2_task1_cross_metrics/task1_cross_alignment_proof.csv
+  - data/task2_snapshot_v2/snapshot_manifest.json
+  - runs/<run_id>/s4_task2_group_concordance_multisource/task2_group_concordance.csv
+  - runs/<run_id>/s5_task2_retrieval_multisource/task2_retrieval_summary.csv
+  - runs/<run_id>/s6_task2_result_synthesis_multisource/task2_benchmark_summary_long.csv
+  - runs/<run_id>/s7_project_benchmark_synthesis/project_benchmark_summary_long.csv
+  - runs/<run_id>/s7_project_benchmark_synthesis/project_representation_scorecard.csv
+components:
+  - docs/contracts/
+  - docs/governance/
+  - scripts/
+  - scripts/fm_extractors/
+  - src/m2mbench/
+  - runs/
