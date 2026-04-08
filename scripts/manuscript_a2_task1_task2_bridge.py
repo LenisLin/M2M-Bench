@@ -1,10 +1,23 @@
 #!/usr/bin/env python3
 """
-Build the active A2 Task1-vs-Task2 bridge table.
+Rebuild the historical A2 Task1-vs-Task2 bridge table.
+
+Status:
+- historical/deprecated but retained
+
+Manuscript role:
+- rebuilds the old A2 bridge surface only
+
+Architecture:
+- not live Figure 3 canon; see `scripts/ARCHITECTURE.md`
 
 The frozen comparison unit is the shared `(dataset, cell_line, target)` group.
 `representation` is retained only as source detail for explicit row-level
 provenance and never defines the shared-group universe.
+
+This script is retained only so the historical/non-canonical A2 bridge surface
+can be reconstructed when needed. It must not be described as a live current-
+phase Figure 3 canonical output.
 """
 
 from __future__ import annotations
@@ -44,7 +57,7 @@ DEFAULT_TASK2_RETRIEVAL_PER_QUERY_PATH = Path(
     "/mnt/NAS_21T/ProjectData/M2M/runs/s5_multisource_impl_verify_20260311_a/s5_task2_retrieval_multisource/task2_retrieval_per_query.parquet"
 )
 DEFAULT_OUTPUT_PATH = Path(
-    "/mnt/NAS_21T/ProjectData/M2M/runs/manuscript_active/group_bridge/task1_task2_group_bridge.csv"
+    "/mnt/NAS_21T/ProjectData/M2M/archive/manuscript_history/group_bridge/task1_task2_group_bridge.csv"
 )
 
 RETRIEVAL_METRICS = [
@@ -61,7 +74,7 @@ GROUP_METRIC_PAIRS = [
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Build the A2 Task1-vs-Task2 group bridge table.")
+    parser = argparse.ArgumentParser(description="Rebuild the historical A2 Task1-vs-Task2 group bridge table.")
     parser.add_argument("--project-root", type=Path, default=ROOT)
     parser.add_argument("--task1-internal-per-query-path", type=Path, default=DEFAULT_TASK1_INTERNAL_PER_QUERY_PATH)
     parser.add_argument("--task1-cross-per-query-path", type=Path, default=DEFAULT_TASK1_CROSS_PER_QUERY_PATH)
@@ -475,7 +488,7 @@ def main() -> int:
     rows.extend(build_group_bridge_rows(task1_cross_group, "cross", task2_group))
 
     if not rows:
-        raise ValueError("A2 bridge produced no lawful shared `(dataset, cell_line, target)` rows.")
+        raise ValueError("Historical A2 bridge produced no lawful shared `(dataset, cell_line, target)` rows.")
 
     bridge_table = (
         pd.DataFrame(rows)
@@ -500,8 +513,8 @@ def main() -> int:
     summary_table = build_summary_table(bridge_table)
     summary_table.to_csv(summary_output_path, index=False)
 
-    print(f"Wrote {len(bridge_table):,} A2 bridge rows to {output_path}")
-    print(f"Wrote {len(summary_table):,} A2 summary rows to {summary_output_path}")
+    print(f"Wrote {len(bridge_table):,} historical A2 bridge rows to {output_path}")
+    print(f"Wrote {len(summary_table):,} historical A2 summary rows to {summary_output_path}")
     print("Shared triplets:", bridge_table[TRIPLET_COLUMNS].drop_duplicates().shape[0])
     return 0
 

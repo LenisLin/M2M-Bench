@@ -2,9 +2,20 @@
 """
 Build the active A1 Task1 internal-vs-cross bridge table.
 
+Status:
+- support-only manuscript builder
+
+Consumed by:
+- Figure 2 internal-to-cross support and retained A1 backfills
+
+Architecture:
+- not a canonical Figure 2 object builder; see `scripts/ARCHITECTURE.md`
+
 The frozen comparison unit is the shared `(dataset, cell_line, target)` group.
 `representation` is retained only as source detail for explicit row-level
 provenance and never defines the shared-group universe.
+
+This retained manuscript-support builder is live for Figure 2 only.
 """
 
 from __future__ import annotations
@@ -40,7 +51,7 @@ DEFAULT_TASK1_GROUP_CROSS_PATH = Path(
     "/mnt/NAS_21T/ProjectData/M2M/runs/s2_task1_cross_metrics_0303/s2_task1_cross_metrics/task1_group_cross.parquet"
 )
 DEFAULT_OUTPUT_PATH = Path(
-    "/mnt/NAS_21T/ProjectData/M2M/runs/manuscript_active/group_bridge/task1_internal_vs_cross_group_bridge.csv"
+    "/mnt/NAS_21T/ProjectData/M2M/runs/manuscript_support/group_bridge/task1_internal_vs_cross_group_bridge.csv"
 )
 
 RETRIEVAL_METRICS = [
@@ -52,7 +63,7 @@ RETRIEVAL_METRICS = [
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Build the A1 Task1 internal-vs-cross group bridge table.")
+    parser = argparse.ArgumentParser(description="Build the Figure 2 A1 Task1 internal-vs-cross group bridge table.")
     parser.add_argument("--project-root", type=Path, default=ROOT)
     parser.add_argument("--internal-per-query-path", type=Path, default=DEFAULT_INTERNAL_PER_QUERY_PATH)
     parser.add_argument("--cross-per-query-path", type=Path, default=DEFAULT_CROSS_PER_QUERY_PATH)

@@ -1,0 +1,4 @@
+representation,hex,shape,linetype,point_fill,point_colour,fill_behavior,status
+Gene,#5E88C1,16,solid,#5E88C1,#5E88C1,filled,frozen
+Pathway,#C76898,17,solid,#C76898,#C76898,filled,frozen
+FM,#9C7AC7,21,22,#FFFFFF,#9C7AC7,outline_only,frozen

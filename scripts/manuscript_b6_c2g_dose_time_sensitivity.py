@@ -1,10 +1,23 @@
 #!/usr/bin/env python3
 """
-Build the active B6 C2G-only dose/time sensitivity table.
+Rebuild the historical B6 C2G-only dose/time sensitivity table.
+
+Status:
+- historical/deprecated but retained
+
+Manuscript role:
+- rebuilds retained B6 sensitivity support only
+- the separate retained overlap audit in `manuscript_phase1/b6_dose_time_overlap/` has no live `scripts/manuscript*` owner in the current cleanup phase
+
+Architecture:
+- not live Figure 3 canon; see `scripts/ARCHITECTURE.md`
 
 This is a downstream manuscript-support table only. It keeps one long-form row
 per C2G query and corrected retrieval metric after an explicit
 `query_row_id -> row_id` metadata join.
+
+The table may remain on disk as historical/non-canonical support, but it is
+not part of the frozen current-phase canonical manuscript object set.
 """
 
 from __future__ import annotations
@@ -26,7 +39,7 @@ DEFAULT_PER_QUERY_PATH = Path(
 DEFAULT_LINCS_META_PATH = Path("data/task2_snapshot_v2/lincs/derived/delta_meta.csv")
 DEFAULT_SCPERTURB_META_PATH = Path("data/task2_snapshot_v2/scperturb_k562/derived/delta_meta.csv")
 DEFAULT_OUTPUT_PATH = Path(
-    "/mnt/NAS_21T/ProjectData/M2M/runs/manuscript_active/sensitivity/task2_c2g_dose_time_sensitivity.csv"
+    "/mnt/NAS_21T/ProjectData/M2M/archive/manuscript_history/sensitivity/task2_c2g_dose_time_sensitivity.csv"
 )
 
 RETRIEVAL_METRICS = [
@@ -38,7 +51,7 @@ RETRIEVAL_METRICS = [
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Build the B6 C2G dose/time sensitivity table.")
+    parser = argparse.ArgumentParser(description="Rebuild the historical B6 C2G dose/time sensitivity table.")
     parser.add_argument("--project-root", type=Path, default=ROOT)
     parser.add_argument("--per-query-path", type=Path, default=DEFAULT_PER_QUERY_PATH)
     parser.add_argument("--lincs-meta-path", type=Path, default=DEFAULT_LINCS_META_PATH)
@@ -315,7 +328,7 @@ def main() -> int:
             batch_frames.append(batch_rows)
 
     if not batch_frames:
-        raise ValueError("B6 produced no C2G query rows from the reviewed Task2 retrieval output.")
+        raise ValueError("Historical B6 produced no C2G query rows from the reviewed Task2 retrieval output.")
 
     c2g_queries = pd.concat(batch_frames, ignore_index=True)
     sensitivity_table = long_format_with_slice_counts(c2g_queries)
@@ -326,8 +339,8 @@ def main() -> int:
     summary_table = build_summary_table(sensitivity_table)
     summary_table.to_csv(summary_output_path, index=False)
 
-    print(f"Wrote {len(sensitivity_table):,} B6 sensitivity rows to {output_path}")
-    print(f"Wrote {len(summary_table):,} B6 summary rows to {summary_output_path}")
+    print(f"Wrote {len(sensitivity_table):,} historical B6 sensitivity rows to {output_path}")
+    print(f"Wrote {len(summary_table):,} historical B6 summary rows to {summary_output_path}")
     print("C2G queries:", c2g_queries["query_row_id"].nunique())
     print(
         "Complete covariate slices:",

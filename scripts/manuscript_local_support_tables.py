@@ -2,10 +2,22 @@
 """
 Build the active local manuscript support tables.
 
+Status:
+- support-only manuscript builder
+
+Consumed by:
+- supplementary B5/B8 support tables and panel-support bookkeeping only
+
+Architecture:
+- not a canonical Figure 2/3 object builder; see `scripts/ARCHITECTURE.md`
+
 Retained scope:
 - B5 C2G `query_n_targets` downstream sensitivity
 - B8 scPerturb K562 C2G `specificity_tier` downstream sensitivity
 - R1 panel-support ledger refresh once local support tables are present
+
+These tables remain supplementary manuscript support only. They are not part
+of the frozen current-phase canonical downstream object set.
 """
 
 from __future__ import annotations
@@ -15,11 +27,18 @@ from pathlib import Path
 import pandas as pd
 import pyarrow.parquet as pq
 
+try:
+    from path_policy import DEFAULT_RUNS_ROOT, DEFAULT_TASK2_CORRECTED_SNAPSHOT_ROOT
+except ModuleNotFoundError:
+    from scripts.path_policy import DEFAULT_RUNS_ROOT, DEFAULT_TASK2_CORRECTED_SNAPSHOT_ROOT
+
 
 ROOT = Path(__file__).resolve().parents[1]
 DOCS = ROOT / "docs"
-RUNS = ROOT / "runs"
-DATA = ROOT / "data"
+NAS_RUNS_ROOT = DEFAULT_RUNS_ROOT
+RUNS = NAS_RUNS_ROOT
+TASK2_SNAPSHOT_ROOT = DEFAULT_TASK2_CORRECTED_SNAPSHOT_ROOT
+CURRENT_S5_ROOT = RUNS / "manuscript_active" / "upstream_s5_current" / "s5_task2_retrieval_multisource"
 
 
 def split_pipe(value: str) -> list[str]:
@@ -42,8 +61,16 @@ def read_columns(rel_path: str) -> set[str]:
 def manuscript_role(row: pd.Series) -> str:
     if row["claim_id"] == "C2_F2g_cross_chemical_policy_exclusion":
         return "policy_exclusion_note"
+    if row["task"] in {"Task1_scope", "Task2_scope"}:
+        return "scope_disclosure_note"
     if row["claim_id"] == "C4_F3g_fm_scope_policy":
         return "scope_disclosure_note"
+    if row["claim_id"] == "C2_F3g_task1_internal_contextual_support":
+        return "contextual_support_evidence"
+    if row["claim_id"] in {"C3_F3h_cell_line_pattern_summary", "C3_F3i_target_pattern_summary"}:
+        return "pattern_summary_evidence"
+    if row["task"] == "Task1_degradation":
+        return "primary_group_evidence"
     if row["task"] in {"Task2_group", "Task2_FM_scope"} and "mean_cosine_centroid" in row["metric"]:
         return "primary_group_evidence"
     if row["task"] == "Task1_cross" and "mean_cosine_centroid" in row["metric"]:
@@ -57,14 +84,24 @@ def scope_restrictions(row: pd.Series) -> str:
     claim_id = row["claim_id"]
     if claim_id == "C2_F2g_cross_chemical_policy_exclusion":
         return "cross chemical excluded by frozen policy/support gating; numeric rationale not manuscript-safe"
+    if claim_id == "C2_F3g_task1_internal_contextual_support":
+        return "Task1 internal contextual support only; metadata-aligned to eligible Task2 triplets; no Task1 cross and no Task1/Task2 pairwise bridge"
+    if row["task"] == "Task1_scope":
+        return "frozen Task1 scope only; internal keeps FM where lawful; cross remains Gene/Pathway only; explicit cross eligibility rows retained"
+    if row["task"] == "Task1_degradation":
+        return "downstream A1 internal-to-cross degradation summary only; shared Gene/Pathway surface; not a Figure 3 bridge"
+    if row["task"] == "Task2_scope":
+        return "dataset/cell_line/representation lawful scope only; distinguishes supported coverage, not_applicable scope, and materialized retrieval directions"
     if claim_id.startswith("C2_F2") and row["task"] == "Task1_cross":
         return "genetic-only cross scope for retained metric rows; keep retrieval directions separate; cross alignment contract required"
     if claim_id.startswith("C2_F2") and row["task"] == "Task1_internal":
         return "internal modality-preserving scope; common Gene/Pathway comparison only for retained main-text Task1 rows"
     if claim_id in {"C3_F3a_group_common_scope"}:
-        return "dataset/cell_line stratified; Gene/Pathway common scope only; no raw dataset pooling; edist remains informational-only"
+        return "dataset/cell_line stratified; Gene/Pathway common scope only; no raw dataset pooling"
     if claim_id in {"C3_F3b_retrieval_c2g_common_scope", "C3_F3c_retrieval_g2c_common_scope"}:
         return "dataset/cell_line stratified; Gene/Pathway common scope only; keep directions separate; no raw dataset pooling"
+    if claim_id in {"C3_F3h_cell_line_pattern_summary", "C3_F3i_target_pattern_summary"}:
+        return "pattern summaries only; built from canonical target-anchored Task2 rows; retrieval target patterns use G2C only because C2G lacks a canonical single-target key"
     if claim_id == "C4_F3e_fm_group_k562_local":
         return "scPerturb K562 local FM scope only; group-level evidence primary; no benchmark-wide FM generalization"
     if claim_id == "C4_F3g_fm_scope_policy":
@@ -127,12 +164,7 @@ def sparse_note(n_queries: int, base: str) -> str:
 
 
 def build_n_targets_sensitivity() -> int:
-    query_path = (
-        RUNS
-        / "s5_multisource_impl_verify_20260311_a"
-        / "s5_task2_retrieval_multisource"
-        / "task2_retrieval_per_query.parquet"
-    )
+    query_path = CURRENT_S5_ROOT / "task2_retrieval_per_query.parquet"
     df = pd.read_parquet(
         query_path,
         columns=[
@@ -177,15 +209,9 @@ def build_n_targets_sensitivity() -> int:
 
 
 def build_specificity_tier_sensitivity() -> int:
-    query_path = (
-        RUNS
-        / "s5_multisource_impl_verify_20260311_a"
-        / "s5_task2_retrieval_multisource"
-        / "task2_retrieval_per_query.parquet"
-    )
+    query_path = CURRENT_S5_ROOT / "task2_retrieval_per_query.parquet"
     meta_path = (
-        DATA
-        / "task2_snapshot_v2"
+        TASK2_SNAPSHOT_ROOT
         / "scperturb_k562"
         / "derived"
         / "delta_meta.csv"

@@ -1,4 +1,13 @@
-## Task1 Proposal — 追加小节 A：Outputs & Field Contracts (Plot-ready + Audit-ready)
+# Output Schemas (Stage-Level Contracts)
+
+This file defines lower-level stage-output schemas and audit bundles. It is not
+the manuscript-facing canonical object registry.
+
+Current interpretation boundary:
+- Figure 2 / Figure 3 canonical downstream objects are frozen in `docs/manuscript_master.md` and `scripts/manuscript_framework_analysis_objects.py`.
+- `runs/<run_id>/<stage>/...` path strings below describe the stage contract shape. In the current production layout, authoritative materializations may instead be NAS-backed under `/mnt/NAS_21T/ProjectData/M2M/runs/...`.
+
+## Task1 Contract — Outputs & Field Contracts (Plot-ready + Audit-ready)
 
 ### A.1 Plot-ready（R 友好长表；用于 Figure 1/2）
 
@@ -78,7 +87,7 @@
 
 ---
 
-## Task1 Proposal — 追加小节 B：Assertions / Fail-fast / Evidence Bundle
+## Task1 Contract — Assertions / Fail-fast / Evidence Bundle
 
 ### B.1 Frozen assertions（必要且可证伪）
 
@@ -248,6 +257,95 @@ contract.
   * `task1_axis_contract_exclusion_families`
   * `task1_axis_expected_families`
   * `task2_axis_value_raw`
+
+---
+
+## Manuscript Plot-ready Support Layer (Frozen Plotting Preparation)
+
+This section defines the support-only plotting-preparation outputs that sit
+below the frozen manuscript figures and above the R plotting namespace. These
+tables do **not** create new canonical benchmark evidence.
+
+Authoritative freeze note:
+- `docs/plotting/plotting_preparation_freeze.md`
+
+Builder:
+- `scripts/manuscript_plot_ready_tables.py`
+
+Output root:
+- `/mnt/NAS_21T/ProjectData/M2M/runs/manuscript_support/plot_ready/`
+
+The frozen manuscript-facing `analysis/` objects remain authoritative upstream,
+but main Figure 2 and Figure 3 scripts consume panel-specific `plot_ready/`
+tables only. The `plot_ready/` layer is the required handoff boundary between
+Python panel-prep and R rendering.
+
+### Figure 1 registries
+
+- `figure1/figure1_panel_1b_dataset_context_coverage.csv`
+- `figure1/figure1_panel_1c_lawful_scope_matrix.csv`
+- `figure1/figure1_panel_1d_representation_modifier_availability.csv`
+- `figure1/figure1_panel_1e_result_object_map.csv`
+- `extended/extended_figure1_support_registry.csv`
+
+### Panel-specific reductions
+
+- `figure2/figure2_panel_2a_task1_scope.csv`
+- `figure2/figure2_panel_2b_internal_performance_overview.csv`
+- `figure2/figure2_panel_2c_gene_vs_pathway_matched_units.csv`
+- `figure2/figure2_panel_2d_internal_to_cross_degradation.csv`
+- `figure2/figure2_panel_2e_cell_line_high_concordance_summary.csv`
+- `figure2/figure2_panel_2f_target_high_concordance_summary.csv`
+- `extended/extended_figure4_cell_line_high_concordance_full.csv`
+- `extended/extended_figure4_target_high_concordance_full.csv`
+- `figure3/figure3_panel_3b_c2g_performance_overview.csv`
+- `figure3/figure3_panel_3c_cell_line_pattern.csv`
+- `figure3/figure3_panel_3d_target_pattern_summary.csv`
+- `figure3/figure3_panel_3e_gene_vs_pathway_paired.csv`
+- `extended/extended_figure6_target_pattern_full.csv`
+- `figure3/figure3_panel_3f_fm_local_tradeoff.csv`
+- `figure3/figure3_panel_3j_task1_contextual_support_reference.csv`
+- `extended/extended_figure8_contextual_support_full.csv`
+- `extended/extended_figure9_support_vs_suitability.csv`
+- `extended/extended_figure9_target_exemplars.csv`
+
+### Contract notes
+
+- `2A` preserves an explicit `ALL` cross-eligibility bin and must not collapse
+  those rows into `FM`.
+- `2B`, `2C`, and `3B` own their panel-defining rank/intensity transforms in
+  Python; R may style but must not recompute panel membership.
+- `2E`, `2F`, `3C`, and `3D` must hard-filter their unsupported rows in Python
+  before plotting and must emit only the staged paired-exemplar reductions used
+  by the main panels.
+- `2C` is the unified matched-unit Gene-vs-Pathway comparison object; `2G`
+  is retired from the live main path.
+- The Task2 scope summary remains support/reference data only and is not
+  exported as a live main `3A` panel.
+- `2E`, `2F`, `3C`, and `3D` now share a paired exemplar enrichment schema.
+  Required plotting fields are `dataset`, the entity id (`cell_line`,
+  `target_token`, or `target`), `gene_enrichment_score`,
+  `pathway_enrichment_score`, `pair_mean_enrichment`,
+  `selection_direction`, `support_value`, `shared_across_modalities_bool`,
+  and `row_order` (plus `row_id` / `global_row_order` for stable rendering).
+- `2E` and `2F` must be internal-only main-text reductions with dual-tail
+  exemplar selection (`3` high + `3` low per dataset). Shared labels in these
+  tables mean shared across `LINCS` and `scPerturb`, not merely across
+  Chemical/Genetic perturbation type.
+- `3C` and `3D` must be enrichment exemplars derived from the Task2 pattern
+  summaries. The success gate is the top quartile within each
+  `dataset + analysis_family + direction + metric_name` surface after Gene and
+  Pathway rows are pooled for ranking.
+- `3C` is LINCS-only in the main-text plot-ready layer; `3D` retains both
+  datasets and highlights shared targets across `LINCS` and `scPerturb`.
+- `3E` remains a plot-ready comparison-family extract over the frozen Task2
+  representation statistics.
+- `3D` must remain common-scope (`Gene|Pathway`) and retrieval rows must remain
+  `C2G` only even after enrichment restaging.
+- `3F` must remain `scPerturb/K562` local only, and the staged output must
+  carry explicit `dataset == scPerturb` and `cell_line == K562` scope truth.
+- `3J` and `EF8C` must collapse repeated `perturbation_type` rows before any
+  plotting-oriented summary or ranking step.
   * `task2_axis_observed_families`
   * `task2_axis_contract_exclusion_families`
   * `task2_axis_expected_families`
