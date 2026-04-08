@@ -3328,7 +3328,7 @@ def build_task1_pathway_vs_gene_panel(
     )
 
 
-def build_figure2_panel_2c(
+def build_figure2_internal_to_cross_degradation_panel(
     *,
     source_path: Path,
     comparison_stats_path: Path,
@@ -3482,7 +3482,7 @@ def build_figure2_panel_2c(
     )
 
 
-def build_figure2_panel_2d(
+def build_figure2_panel_2c(
     *,
     bridge_detail_path: Path,
     comparison_stats_path: Path,
@@ -3490,6 +3490,19 @@ def build_figure2_panel_2d(
 ) -> Path:
     return build_task1_pathway_vs_gene_panel(
         bridge_detail_path=bridge_detail_path,
+        comparison_stats_path=comparison_stats_path,
+        output_path=output_path,
+    )
+
+
+def build_figure2_panel_2d(
+    *,
+    source_path: Path,
+    comparison_stats_path: Path,
+    output_path: Path,
+) -> Path:
+    return build_figure2_internal_to_cross_degradation_panel(
+        source_path=source_path,
         comparison_stats_path=comparison_stats_path,
         output_path=output_path,
     )
@@ -5109,13 +5122,13 @@ def build_one(name: str, args: argparse.Namespace) -> Path:
             output_path=output_path,
         )
     if name == "figure2_panel_2c_gene_vs_pathway_matched_units.csv":
-        return build_figure2_panel_2d(
+        return build_figure2_panel_2c(
             bridge_detail_path=args.task1_bridge_detail_path,
             comparison_stats_path=args.comparison_stats_path,
             output_path=output_path,
         )
     if name == "figure2_panel_2d_internal_to_cross_degradation.csv":
-        return build_figure2_panel_2c(
+        return build_figure2_panel_2d(
             source_path=args.task1_bridge_detail_path,
             comparison_stats_path=args.comparison_stats_path,
             output_path=output_path,

@@ -674,7 +674,8 @@ def _apply_spearman_bh(stats_df: pd.DataFrame) -> pd.DataFrame:
     testable_mask = out["testable_bool"].fillna(False) & out["p_value"].notna()
     if testable_mask.sum() == 0:
         return out
-    families = out[["representation", "metric_name", "modifier_type"]].apply(tuple, axis=1)
+    metric_column = "metric_name" if "metric_name" in out.columns else "metric"
+    families = out[["representation", metric_column, "modifier_type"]].apply(tuple, axis=1)
     for family in families[testable_mask].unique():
         fam_mask = testable_mask & (families == family)
         out.loc[fam_mask, "bh_q"] = bh_adjust(out.loc[fam_mask, "p_value"])
