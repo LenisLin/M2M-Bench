@@ -37,6 +37,13 @@
 #   - Attempted edist ranking or benchmark summary contract violation -> exit non-zero
 # Last Updated: 2026-03-11
 
+# Pipeline Status:
+#   - active canonical pipeline
+# Manuscript Role:
+#   - Task2 synthesis stage feeding Figure 3 canonical objects without redefining benchmark semantics
+# Architecture:
+#   - see scripts/ARCHITECTURE.md for canonical vs support vs historical script families
+
 """
 Inputs:
 - audited corrected multisource S4/S5 stage outputs only
@@ -80,9 +87,14 @@ import numpy as np
 import pandas as pd
 import yaml
 
+try:
+    from path_policy import DEFAULT_TASK2_CORRECTED_SNAPSHOT_ROOT
+except ModuleNotFoundError:
+    from scripts.path_policy import DEFAULT_TASK2_CORRECTED_SNAPSHOT_ROOT
+
 STAGE = "s6_task2_result_synthesis_multisource"
 CONFIG_PATH = Path("config/config.yaml")
-EXPECTED_TASK2_SNAPSHOT = Path("data/task2_snapshot_v2")
+EXPECTED_TASK2_SNAPSHOT = DEFAULT_TASK2_CORRECTED_SNAPSHOT_ROOT
 GLOBAL_SEED = 619
 CHANCE_IDENTITY_TOL = 1e-12
 MAX_COUNTEREXAMPLES = 5
@@ -436,8 +448,8 @@ def is_relative_to(path: Path, parent: Path) -> bool:
 
 
 def snapshot_matches_expected(raw_path: object) -> bool:
-    value = Path(str(raw_path)).as_posix().rstrip("/")
-    expected = EXPECTED_TASK2_SNAPSHOT.as_posix()
+    value = Path(str(raw_path)).resolve().as_posix().rstrip("/")
+    expected = EXPECTED_TASK2_SNAPSHOT.resolve().as_posix()
     return value == expected or value.endswith(f"/{expected}")
 
 

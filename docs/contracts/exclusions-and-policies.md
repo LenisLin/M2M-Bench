@@ -2,9 +2,9 @@
 
 ## Cross (Task1 S5)
 - Cross chemical is EXCLUDED.
-  - Reason: only 2 matched contexts; analysis value is insufficient.
+  - Reason: frozen policy/support gating does not admit a current-phase evaluable canonical cross-chemical slice.
   - Policy: do not compute or report any chemical cross metrics.
-  - Evidence: attrition/support tables must record `excluded_due_to_sparse(n_context=2)`.
+  - Evidence: manuscript-facing scope/support tables should report the exclusion through eligibility fields and frozen exclusion labels (for example `matched_keys_lt5`), not numeric matched-context rhetoric.
 
 - Cross genetic only.
 - Cross alignment MUST use a single contract:

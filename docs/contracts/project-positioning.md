@@ -53,6 +53,14 @@ M2M-Bench 的目标是建立一个**可审计、可复现、可比较**的 bench
 * **Task1-cross matched**：在跨数据集（LINCS ↔ scPerturb）中，选择在 `(perturbation_type, cell_line, target)` 上可对应的实例集合，并通过冻结对齐契约映射到具体行索引（细则在 Task1 伪代码 spec 中写死）。
 * **Task2 matched**：在同一数据集内按 `mech_key=(dataset, cell_line, target_token)` 匹配 Chemical 与 Genetic 两个子集，形成机制对比对。这里的 analysis/cohort matching 不会重定义实例层 row identity；一个 Chemical 行可因 explode-membership 参与多个 `target_token` cohort。
 
+### 3.3 当前冻结稿件对齐注记（engineering review）
+
+* 稿件层固定的 biological indexing unit 是 `(dataset, cell_line, target, perturbation_type)`。
+* `direction`、`representation`、`group-level vs instance-level` 属于 comparison-layer axes，不属于上述 biological indexing unit。
+* 当前 corrected Task2 代码事实仍然是 `mech_key=(dataset, cell_line, target_token)`；本文件不应被读成 “S3-S6 已经把 cohort key 改成了 `(dataset, cell_line, target, perturbation_type)`”。
+* Figure 3 的主轴是 `C2G`；`G2C` 保留为 supporting / supplementary axis，而不是并列 headline。
+* `specificity_tier`、`n_targets`、dose/time 当前只保留为 supplementary 或 historical modifier surfaces，除非后续明确批准新的 canonical outputs。
+
 ---
 
 ## 4. 评测协议（强调：Task1-internal / Task1-cross / Task2 复用同一套方法）

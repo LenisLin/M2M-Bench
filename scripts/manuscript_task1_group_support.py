@@ -1,6 +1,16 @@
 #!/usr/bin/env python3
 """
-Shared Task1 group-metric helpers for manuscript bridge tables.
+Shared Task1 group-metric helpers for the live A1 builder and retained
+historical bridge builders.
+
+Status:
+- support-only helper
+
+Consumed by:
+- manuscript support builders; no standalone canonical manuscript output role
+
+Architecture:
+- helper surface only; see `scripts/ARCHITECTURE.md`
 
 These helpers keep the manuscript bridge scripts aligned with the existing
 Task1 contracts without reintroducing representation as a shared-group key.

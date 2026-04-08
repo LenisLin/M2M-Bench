@@ -2,6 +2,15 @@
 """
 Conservative manuscript-support builder for A3: Task2 direction robustness.
 
+Status:
+- support-only manuscript builder
+
+Consumed by:
+- appendix/transparency audit surfaces only
+
+Architecture:
+- not a canonical Figure 3 object builder; see `scripts/ARCHITECTURE.md`
+
 Analysis purpose:
 - Audit direction-specific Task2 retrieval support without collapsing `C2G`
   and `G2C`.

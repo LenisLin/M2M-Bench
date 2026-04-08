@@ -1,6 +1,20 @@
 #!/usr/bin/env python3
 """
-Build compact figure-facing analysis inputs from the active manuscript-support outputs.
+Build historical figure-facing backfills from retained non-canonical manuscript
+support outputs.
+
+Status:
+- historical/deprecated but retained
+
+Manuscript role:
+- rebuilds legacy overview/backfill files only
+
+Architecture:
+- not a canonical manuscript object builder; see `scripts/ARCHITECTURE.md`
+
+This helper is retained only for legacy figure-input overviews. It must not be
+treated as the canonical current-phase manuscript object builder; that role
+belongs to `scripts/manuscript_framework_analysis_objects.py`.
 """
 
 from __future__ import annotations
@@ -13,15 +27,17 @@ from pathlib import Path
 import pandas as pd
 
 
-DEFAULT_ACTIVE_ROOT = Path("/mnt/NAS_21T/ProjectData/M2M/runs/manuscript_active")
+DEFAULT_HISTORY_ROOT = Path("/mnt/NAS_21T/ProjectData/M2M/archive/manuscript_history")
 
 # Use a simple conservative threshold so supported slices are not driven by tiny strata.
 B6_SUPPORTED_N_QUERIES_THRESHOLD = 5
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Create figure-facing analysis inputs from active manuscript outputs.")
-    parser.add_argument("--active-root", type=Path, default=DEFAULT_ACTIVE_ROOT)
+    parser = argparse.ArgumentParser(
+        description="Create historical figure-facing analysis inputs from retained non-canonical manuscript outputs."
+    )
+    parser.add_argument("--history-root", type=Path, default=DEFAULT_HISTORY_ROOT)
     return parser.parse_args()
 
 
@@ -274,26 +290,29 @@ def build_b6_outputs(sensitivity_dir: Path, analysis_dir: Path) -> list[str]:
     return [metric_dose_time_path.name, dataset_cellline_path.name, supported_slices_path.name]
 
 
-def write_analysis_note(active_root: Path, analysis_dir: Path, created_files: list[str]) -> str:
+def write_analysis_note(history_root: Path, analysis_dir: Path, created_files: list[str]) -> str:
     note_path = analysis_dir / "figure_analysis_update.md"
     lines = [
-        "# Figure Analysis Update",
+        "# Historical Figure Analysis Update",
         "",
-        f"- Relocated active outputs: `{active_root / 'group_bridge'}`, `{active_root / 'sensitivity'}`, `{active_root / 'notes'}`.",
-        f"- Figure-facing tables created: {', '.join(f'`{name}`' for name in created_files)}.",
+        f"- Retained historical inputs: `{history_root / 'group_bridge'}`, `{history_root / 'sensitivity'}`, `{history_root / 'notes'}`.",
+        f"- Historical/non-canonical figure-facing tables created: {', '.join(f'`{name}`' for name in created_files)}.",
         f"- B6 supported-slice threshold: `n_queries >= {B6_SUPPORTED_N_QUERIES_THRESHOLD}`.",
-        "- Blocker for figure drafting: none.",
+        "- Current canonical registry: `analysis/framework_analysis_manifest.json`.",
+        "- These outputs are historical only and must not supersede the frozen current-phase canonical object set.",
     ]
     note_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return note_path.name
 
 
-def write_manifest(active_root: Path, created_files: list[str]) -> str:
-    manifest_path = active_root / "manifest.json"
+def write_manifest(history_root: Path, created_files: list[str]) -> str:
+    manifest_path = history_root / "manifest.json"
     payload = {
-        "batch_name": "manuscript_active",
+        "batch_name": "manuscript_history_historical_figure_inputs",
         "created_at": datetime.now().astimezone().isoformat(timespec="seconds"),
-        "files": [
+        "disposition": "historical_noncanonical",
+        "canonical_registry": "analysis/framework_analysis_manifest.json",
+        "historical_noncanonical_files": [
             "group_bridge/task1_internal_vs_cross_group_bridge.csv",
             "group_bridge/task1_internal_vs_cross_group_bridge_summary.csv",
             "group_bridge/task1_task2_group_bridge.csv",
@@ -309,7 +328,7 @@ def write_manifest(active_root: Path, created_files: list[str]) -> str:
             "scripts/manuscript_b6_c2g_dose_time_sensitivity.py",
             "scripts/manuscript_figure_analysis_inputs.py",
         ],
-        "note": "downstream manuscript-support outputs",
+        "note": "Historical/non-canonical figure-input backfill only; current canonical manuscript objects are declared in analysis/framework_analysis_manifest.json.",
     }
     manifest_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     return manifest_path.name
@@ -317,20 +336,20 @@ def write_manifest(active_root: Path, created_files: list[str]) -> str:
 
 def main() -> int:
     args = parse_args()
-    active_root = args.active_root.resolve()
-    group_bridge_dir = active_root / "group_bridge"
-    sensitivity_dir = active_root / "sensitivity"
-    analysis_dir = active_root / "analysis"
+    history_root = args.history_root.resolve()
+    group_bridge_dir = history_root / "group_bridge"
+    sensitivity_dir = history_root / "sensitivity"
+    analysis_dir = history_root / "analysis"
     analysis_dir.mkdir(parents=True, exist_ok=True)
 
     created_files: list[str] = []
     created_files.extend(build_a1_outputs(group_bridge_dir, analysis_dir))
     created_files.extend(build_a2_outputs(group_bridge_dir, analysis_dir))
     created_files.extend(build_b6_outputs(sensitivity_dir, analysis_dir))
-    created_files.append(write_analysis_note(active_root, analysis_dir, created_files.copy()))
-    created_files.append(write_manifest(active_root, created_files.copy()))
+    created_files.append(write_analysis_note(history_root, analysis_dir, created_files.copy()))
+    created_files.append(write_manifest(history_root, created_files.copy()))
 
-    print(f"Wrote {len(created_files)} analysis artifacts under {analysis_dir}")
+    print(f"Wrote {len(created_files)} historical analysis artifacts under {analysis_dir}")
     for name in created_files:
         print(name)
     return 0

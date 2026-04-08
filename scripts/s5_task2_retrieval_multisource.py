@@ -2,39 +2,46 @@
 # SCRIPT_HEADER_CONTRACT
 # Script: scripts/s5_task2_retrieval_multisource.py
 # Purpose: Compute corrected Task2 multisource target-level retrieval metrics
-#   under the approved S5 contract from data/task2_snapshot_v2 only.
+#   under the approved S5 contract from config/config.yaml::paths.task2_corrected_snapshot only.
 # Inputs:
-#   - data/task2_snapshot_v2/snapshot_manifest.json
-#   - data/task2_snapshot_v2/task2_pairs_coverage.csv
-#   - data/task2_snapshot_v2/representation_availability_registry.csv
-#   - data/task2_snapshot_v2/lincs/task2_lincs_pairs.csv
-#   - data/task2_snapshot_v2/lincs/derived/{delta_meta.csv,task2_row_membership.parquet,gene_delta.npy,pathway_delta.npy}
-#   - data/task2_snapshot_v2/scperturb_k562/Common_Targets_K562.csv
-#   - data/task2_snapshot_v2/scperturb_k562/derived/{delta_meta.csv,task2_row_membership.parquet,gene_delta.npy,pathway_delta.npy}
-#   - data/task2_snapshot_v2/scperturb_k562/fm/<model>/{fm_delta.npy,fm_delta_meta.csv,delta_operator_policy.json}
+#   - config/config.yaml::paths.task2_corrected_snapshot/snapshot_manifest.json
+#   - config/config.yaml::paths.task2_corrected_snapshot/task2_pairs_coverage.csv
+#   - config/config.yaml::paths.task2_corrected_snapshot/representation_availability_registry.csv
+#   - config/config.yaml::paths.task2_corrected_snapshot/lincs/task2_lincs_pairs.csv
+#   - config/config.yaml::paths.task2_corrected_snapshot/lincs/derived/{delta_meta.csv,task2_row_membership.parquet,gene_delta.npy,pathway_delta.npy}
+#   - config/config.yaml::paths.task2_corrected_snapshot/scperturb_k562/Common_Targets_K562.csv
+#   - config/config.yaml::paths.task2_corrected_snapshot/scperturb_k562/derived/{delta_meta.csv,task2_row_membership.parquet,gene_delta.npy,pathway_delta.npy}
+#   - config/config.yaml::paths.task2_corrected_snapshot/scperturb_k562/fm/<model>/{fm_delta.npy,fm_delta_meta.csv,delta_operator_policy.json}
 # Outputs:
-#   - runs/<run_id>/s5_task2_retrieval_multisource/task2_retrieval_per_query.parquet
-#   - runs/<run_id>/s5_task2_retrieval_multisource/task2_retrieval_summary.csv
-#   - runs/<run_id>/s5_task2_retrieval_multisource/task2_retrieval_summary_long.csv
-#   - runs/<run_id>/s5_task2_retrieval_multisource/task2_retrieval_attrition.csv
-#   - runs/<run_id>/s5_task2_retrieval_multisource/task2_chance_identity_check.csv
-#   - runs/<run_id>/s5_task2_retrieval_multisource/run_manifest.json
-#   - runs/<run_id>/s5_task2_retrieval_multisource/audit_assertions.json
-#   - runs/<run_id>/s5_task2_retrieval_multisource/manifest.json
+#   - config/config.yaml::paths.runs_dir/<run_id>/s5_task2_retrieval_multisource/task2_retrieval_per_query.parquet
+#   - config/config.yaml::paths.runs_dir/<run_id>/s5_task2_retrieval_multisource/task2_retrieval_summary.csv
+#   - config/config.yaml::paths.runs_dir/<run_id>/s5_task2_retrieval_multisource/task2_retrieval_summary_long.csv
+#   - config/config.yaml::paths.runs_dir/<run_id>/s5_task2_retrieval_multisource/task2_retrieval_attrition.csv
+#   - config/config.yaml::paths.runs_dir/<run_id>/s5_task2_retrieval_multisource/task2_chance_identity_check.csv
+#   - config/config.yaml::paths.runs_dir/<run_id>/s5_task2_retrieval_multisource/run_manifest.json
+#   - config/config.yaml::paths.runs_dir/<run_id>/s5_task2_retrieval_multisource/audit_assertions.json
+#   - config/config.yaml::paths.runs_dir/<run_id>/s5_task2_retrieval_multisource/manifest.json
 # Side Effects:
-#   - Creates isolated run directory: runs/<run_id>/s5_task2_retrieval_multisource/
+#   - Creates isolated run directory under config/config.yaml::paths.runs_dir
 # Config Dependencies:
 #   - config/config.yaml::project.seed
 #   - config/config.yaml::paths.runs_dir
 # Execution:
 #   - python scripts/s5_task2_retrieval_multisource.py --run-id <run_id> --seed 619
 # Failure Modes:
-#   - Snapshot root is not data/task2_snapshot_v2 -> exit non-zero
+#   - Snapshot root is not config/config.yaml::paths.task2_corrected_snapshot -> exit non-zero
 #   - Missing required snapshot files -> exit non-zero
 #   - Coverage / registry / schema / key / scope drift -> exit non-zero
-#   - Representation validation failure or forbidden 1HAE analysis label -> exit non-zero
+#   - Representation validation failure -> exit non-zero
 #   - Summary-grid / denominator / chance-identity contract violation -> exit non-zero
 # Last Updated: 2026-03-11
+
+# Pipeline Status:
+#   - active canonical pipeline
+# Manuscript Role:
+#   - primary Task2 direction-specific retrieval benchmark evidence feeding Figure 3 canon
+# Architecture:
+#   - see scripts/ARCHITECTURE.md for canonical vs support vs historical script families
 
 from __future__ import annotations
 
@@ -56,6 +63,11 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 import yaml
+
+try:
+    from path_policy import DEFAULT_TASK2_CORRECTED_SNAPSHOT_ROOT
+except ModuleNotFoundError:
+    from scripts.path_policy import DEFAULT_TASK2_CORRECTED_SNAPSHOT_ROOT
 
 from s4_task2_group_concordance_multisource import (
     DATASET_ORDER,
@@ -87,7 +99,7 @@ from s4_task2_group_concordance_multisource import (
 
 STAGE = "s5_task2_retrieval_multisource"
 CONFIG_PATH = Path("config/config.yaml")
-EXPECTED_TASK2_SNAPSHOT = Path("data/task2_snapshot_v2")
+EXPECTED_TASK2_SNAPSHOT = DEFAULT_TASK2_CORRECTED_SNAPSHOT_ROOT
 
 GLOBAL_SEED = 619
 HIT_K_LIST: Tuple[int, ...] = (1, 5, 10)
@@ -1186,10 +1198,14 @@ def main() -> int:
     init_global_seed(seed)
 
     runs_dir = resolve_config_path(project_root, str(config["paths"]["runs_dir"]))
-    task2_snapshot = (project_root / EXPECTED_TASK2_SNAPSHOT).resolve()
-    expected_snapshot = (project_root / EXPECTED_TASK2_SNAPSHOT).resolve()
+    task2_snapshot = resolve_config_path(project_root, str(config["paths"]["task2_snapshot_corrected"]))
+    expected_snapshot = resolve_config_path(project_root, str(EXPECTED_TASK2_SNAPSHOT))
     if task2_snapshot != expected_snapshot:
-        print("[ERROR] Snapshot isolation check failed unexpectedly.", file=sys.stderr)
+        print(
+            "[ERROR] Snapshot isolation violation: config.paths.task2_snapshot_corrected must resolve "
+            f"to {expected_snapshot}, got {task2_snapshot}",
+            file=sys.stderr,
+        )
         return 4
     if not task2_snapshot.is_dir():
         print(f"[ERROR] Missing corrected Task2 snapshot root: {task2_snapshot}", file=sys.stderr)
@@ -1220,8 +1236,11 @@ def main() -> int:
             "name": "task2_snapshot_v2_isolation",
             "pass": True,
             "details": {
-                "rules": ["S5 reads exclusively from data/task2_snapshot_v2/"],
+                "rules": [
+                    "S5 reads exclusively from the authoritative corrected Task2 snapshot root.",
+                ],
                 "task2_snapshot": str(task2_snapshot),
+                "expected_task2_snapshot": str(expected_snapshot),
             },
             "counterexamples": [],
         }
@@ -1323,7 +1342,7 @@ def main() -> int:
             input_paths.extend(delta_inputs)
             fail_on_forbidden_cell_line(delta_meta, ["cell_line"], f"{dataset} delta_meta.csv")
 
-            membership = build_membership_from_delta_meta(dataset, delta_meta)
+            membership = build_membership_from_delta_meta(dataset, delta_meta, eligible_subset)
             parity_membership, membership_inputs = load_membership_parity_table(dataset, task2_snapshot / bundle.membership_relpath)
             input_paths.extend(membership_inputs)
             validate_membership_parity(
@@ -1373,21 +1392,6 @@ def main() -> int:
         print(f"[ERROR] Failed loading dataset inputs: {exc}", file=sys.stderr)
         return 7
 
-    no_forbidden_1hae = (
-        not coverage["cell_line"].eq("1HAE").any()
-        and not registry["cell_line"].eq("1HAE").any()
-        and all(not contexts[dataset]["delta_meta"]["cell_line"].eq("1HAE").any() for dataset in DATASET_ORDER)
-    )
-    assertions.append(
-        {
-            "name": "no_forbidden_1HAE_in_analysis_inputs",
-            "pass": bool(no_forbidden_1hae),
-            "details": {
-                "rules": ["Normalized Task2 analysis-facing inputs must not contain cell_line=1HAE"],
-            },
-            "counterexamples": [] if no_forbidden_1hae else [{"cell_line": "1HAE"}],
-        }
-    )
     assertions.append(
         {
             "name": "membership_parity_from_delta_meta",

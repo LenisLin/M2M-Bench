@@ -3,6 +3,12 @@
 # Legacy note:
 #   - Preserved historical scPerturb-K562 S4 artifact.
 #   - Corrected multisource Task2 S4 semantics live in docs/contracts/task2_spec.md and scripts/s4_task2_group_concordance_multisource.py.
+# Status:
+#   - historical/deprecated but retained
+# Canonical Successor:
+#   - scripts/s4_task2_group_concordance_multisource.py
+# Manuscript Role:
+#   - retained for historical reconstruction only; not live Figure 2/3 canon
 # Purpose: Compute legacy/interim Task2 K562 group-level cross-mechanism concordance for Chemical vs Genetic cohorts.
 # Inputs:
 #   - Task2 Snapshot K562: config/config.yaml::paths.task2_snapshot

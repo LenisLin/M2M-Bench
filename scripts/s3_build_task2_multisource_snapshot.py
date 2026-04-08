@@ -1,10 +1,10 @@
 # SCRIPT_HEADER_CONTRACT
 # Script: scripts/s3_build_task2_multisource_snapshot.py
-# Purpose: Build corrected Task2 multisource snapshot artifacts under data/task2_snapshot_v2
+# Purpose: Build corrected Task2 multisource snapshot artifacts under config/config.yaml::paths.task2_corrected_snapshot
 #   by reusing the audited legacy scPerturb-K562 Task2 snapshot and materializing
 #   downstream-friendly LINCS Gene/Pathway derived assets from Task1 LINCS sources.
 # Inputs:
-#   - Legacy scPerturb Task2 snapshot: config/config.yaml::paths.task2_snapshot (must resolve to data/task2_snapshot_v1)
+#   - Legacy scPerturb Task2 snapshot: config/config.yaml::paths.task2_snapshot
 #   - Task1 LINCS assets:
 #       config/config.yaml::paths.task1_snapshot/lincs/lincs-engine1-meta.csv
 #       config/config.yaml::paths.task1_snapshot/lincs/lincs-engine1-gene-delta.pt
@@ -12,7 +12,7 @@
 #       config/config.yaml::paths.task1_snapshot/pathway/hallmark-w-2477x50.npy
 #       config/config.yaml::paths.task1_snapshot/pathway/lincs-pathway-policy.json
 # Outputs:
-#   - Shared snapshot artifacts under --output-root (default data/task2_snapshot_v2):
+#   - Shared snapshot artifacts under --output-root (default config/config.yaml::paths.task2_corrected_snapshot):
 #       snapshot_manifest.json
 #       source_lineage_manifest.json
 #       task2_pairs_coverage.csv
@@ -25,27 +25,34 @@
 #       lincs/{lincs-engine1-meta.csv,lincs-gene-alignment.csv,task2_lincs_pairs.csv,subtree_manifest.json}
 #       lincs/derived/{gene_delta.npy,delta_meta.csv,pathway_delta.npy,task2_row_membership.parquet}
 #   - Optional/helper run outputs:
-#       runs/<run_id>/s3_build_task2_multisource_snapshot/task2_post_build_inventory.csv
+#       config/config.yaml::paths.runs_dir/<run_id>/s3_build_task2_multisource_snapshot/task2_post_build_inventory.csv
 #   - AVCP Artifacts:
-#       runs/<run_id>/s3_build_task2_multisource_snapshot/{run_manifest.json,audit_assertions.json,manifest.json}
+#       config/config.yaml::paths.runs_dir/<run_id>/s3_build_task2_multisource_snapshot/{run_manifest.json,audit_assertions.json,manifest.json}
 # Side Effects:
 #   - Creates/updates snapshot directory under --output-root
-#   - Creates isolated run directory: runs/<run_id>/s3_build_task2_multisource_snapshot/
+#   - Creates isolated run directory under config/config.yaml::paths.runs_dir
 # Config Dependencies:
 #   - config/config.yaml::project.seed
 #   - config/config.yaml::paths.task1_snapshot
 #   - config/config.yaml::paths.task2_snapshot
 #   - config/config.yaml::paths.runs_dir
 # Execution:
-#   - python scripts/s3_build_task2_multisource_snapshot.py --run-id <run_id> --output-root data/task2_snapshot_v2 --seed 619
+#   - python scripts/s3_build_task2_multisource_snapshot.py --run-id <run_id> --output-root /mnt/NAS_21T/ProjectData/M2M/snapshots/task2_snapshot_v2 --seed 619
 # Failure Modes:
 #   - Seed != 619 -> exit non-zero
-#   - config.paths.task2_snapshot does not resolve to legacy data/task2_snapshot_v1 -> exit non-zero
+#   - config.paths.task2_snapshot does not resolve to the configured legacy Task2 snapshot root -> exit non-zero
 #   - Missing required legacy scPerturb or Task1 LINCS assets -> exit non-zero
 #   - LINCS source tensor/meta row mismatch or missing required source keys -> exit non-zero
 #   - No eligible LINCS Task2 cohorts found -> exit non-zero
-#   - Output routing outside --output-root or runs/<run_id>/... -> exit non-zero
+#   - Output routing outside --output-root or config/config.yaml::paths.runs_dir/<run_id>/... -> exit non-zero
 # Last Updated: 2026-03-10
+
+# Pipeline Status:
+#   - active canonical pipeline
+# Manuscript Role:
+#   - corrected Task2 multisource snapshot builder upstream of Figure 3 canon
+# Architecture:
+#   - see scripts/ARCHITECTURE.md for canonical vs support vs historical script families
 
 from __future__ import annotations
 
@@ -69,15 +76,28 @@ import pyarrow.parquet as pq
 import torch
 import yaml
 
+try:
+    from path_policy import (
+        DEFAULT_TASK1_SNAPSHOT_ROOT,
+        DEFAULT_TASK2_CORRECTED_SNAPSHOT_ROOT,
+        DEFAULT_TASK2_LEGACY_SNAPSHOT_ROOT,
+    )
+except ModuleNotFoundError:
+    from scripts.path_policy import (
+        DEFAULT_TASK1_SNAPSHOT_ROOT,
+        DEFAULT_TASK2_CORRECTED_SNAPSHOT_ROOT,
+        DEFAULT_TASK2_LEGACY_SNAPSHOT_ROOT,
+    )
+
 STAGE = "s3_build_task2_multisource_snapshot"
 CONFIG_PATH = Path("config/config.yaml")
 
 GLOBAL_SEED = 619
 MAX_COUNTEREXAMPLES = 5
 LINCS_BATCH_ROWS = 4096
-EXPECTED_LEGACY_TASK2_SNAPSHOT = Path("data/task2_snapshot_v1")
-DEFAULT_OUTPUT_ROOT = Path("data/task2_snapshot_v2")
-EXPECTED_TASK1_SNAPSHOT = Path("data/task1_snapshot_v1")
+EXPECTED_LEGACY_TASK2_SNAPSHOT = DEFAULT_TASK2_LEGACY_SNAPSHOT_ROOT
+DEFAULT_OUTPUT_ROOT = DEFAULT_TASK2_CORRECTED_SNAPSHOT_ROOT
+EXPECTED_TASK1_SNAPSHOT = DEFAULT_TASK1_SNAPSHOT_ROOT
 
 REPRESENTATION_ORDER: Tuple[str, ...] = (
     "Gene",
@@ -93,11 +113,6 @@ REPRESENTATION_ORDER: Tuple[str, ...] = (
 LINCS_REPRESENTATIONS = {"Gene", "Pathway"}
 SCPERTURB_K562_REPRESENTATIONS = set(REPRESENTATION_ORDER)
 LINCS_ALLOWED_PERT_TYPES = {"drug", "sh", "crispr", "oe"}
-LINCS_CELL_LINE_ALIAS_MAP = {
-    "1HAE": "HA1E",
-}
-
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="S3 corrected Task2 multisource snapshot builder")
     parser.add_argument("--project-root", type=Path, default=Path("."))
@@ -178,8 +193,7 @@ def normalize_required_text(value: object) -> str:
 
 
 def normalize_lincs_cell_line(value: object) -> str:
-    raw = normalize_required_text(value)
-    return LINCS_CELL_LINE_ALIAS_MAP.get(raw, raw)
+    return normalize_required_text(value)
 
 
 def to_float_or_nan(value: object) -> float:
@@ -198,23 +212,32 @@ def join_tokens(tokens: Sequence[str]) -> str:
     return ";".join(tokens)
 
 
-def tokenize_scperturb_target(raw_target: object) -> Tuple[str, ...]:
-    raw = normalize_required_text(raw_target)
-    tokens: List[str] = []
-    for chunk in raw.split(";"):
-        token = chunk.strip()
-        if token:
-            tokens.append(token)
-    return tuple(sorted(set(tokens)))
-
-
-def tokenize_lincs_target(raw_target: object) -> Tuple[str, ...]:
+def split_target_tokens(raw_target: object, delimiters: Sequence[str]) -> Tuple[str, ...]:
     raw = normalize_required_text(raw_target)
     if not raw:
         return tuple()
-    normalized = raw.replace(";", "|")
-    tokens = [chunk.strip() for chunk in normalized.split("|") if chunk.strip()]
+
+    chunks: List[str] = [raw]
+    for delimiter in delimiters:
+        next_chunks: List[str] = []
+        for chunk in chunks:
+            next_chunks.extend(chunk.split(delimiter))
+        chunks = next_chunks
+
+    tokens = [chunk.strip() for chunk in chunks if chunk.strip()]
     return tuple(sorted(set(tokens)))
+
+
+def tokenize_scperturb_target(raw_target: object) -> Tuple[str, ...]:
+    # Current corrected snapshots store canonical ";"-joined tokens, while
+    # upstream scPerturb raw sources may still carry "_" as the chemical
+    # multi-target delimiter. Accept both here so membership rebuilds remain
+    # source-compatible without changing the canonical ";"-joined contract.
+    return split_target_tokens(raw_target, delimiters=(";", "_"))
+
+
+def tokenize_lincs_target(raw_target: object) -> Tuple[str, ...]:
+    return split_target_tokens(raw_target, delimiters=(";", "|"))
 
 
 def link_or_copy(src: Path, dst: Path) -> str:
@@ -536,6 +559,15 @@ def normalize_lincs_metadata(lincs_meta: pd.DataFrame) -> Tuple[pd.DataFrame, pd
     meta["perturbation_class"] = meta["pert_type_norm"].map(
         {"drug": "Chemical", "sh": "Genetic", "crispr": "Genetic", "oe": "Genetic"}
     )
+    genetic_multi_target_mask = (
+        exclusion_reason.isna()
+        & meta["perturbation_class"].eq("Genetic")
+        & meta["target_tokens_all"].map(len).ne(1)
+    )
+    exclusion_reason = exclusion_reason.mask(
+        genetic_multi_target_mask,
+        "non_single_gene_genetic_target",
+    )
     meta["exclusion_reason"] = exclusion_reason
 
     excluded = meta.loc[meta["exclusion_reason"].notna(), [
@@ -650,7 +682,10 @@ def build_lincs_task2_tables(
     included["eligible_tokens"] = [eligible_token_lists[idx] for idx in included.index]
     included = included.sort_values("source_row_index", kind="mergesort").reset_index(drop=True)
     included["row_id"] = np.arange(len(included), dtype=np.int64)
-    included["target_tokens"] = included["eligible_tokens"].map(join_tokens)
+    # Preserve the full source-level chemical target identity in delta_meta.
+    # Cohort membership remains restricted to eligible tokens via the exploded
+    # membership table below.
+    included["target_tokens"] = included["target_tokens_all"].map(join_tokens)
     included["specificity_tier"] = "NA"
     included["n_controls_used"] = 1
     included["dataset_side"] = "LINCS"
@@ -747,6 +782,51 @@ def materialize_lincs_subset_tensor(
     out.flush()
     del out
     return n_rows, width
+
+
+def load_lincs_pathway_projection_contract(
+    *,
+    w_path: Path,
+    policy_path: Path,
+) -> np.ndarray:
+    with policy_path.open("r", encoding="utf-8") as handle:
+        policy = json.load(handle)
+
+    mode = str(policy.get("mode", "")).strip()
+    if mode != "project_on_load":
+        raise ValueError(f"LINCS pathway policy mode must be project_on_load, got {mode!r}")
+
+    w = np.load(w_path).astype(np.float32, copy=False)
+    if w.shape != (2477, 50):
+        raise ValueError(f"hallmark-w-2477x50.npy must have shape (2477,50), got {w.shape}")
+
+    policy_sha = str(policy.get("W_sha256", "")).strip()
+    actual_sha = compute_sha256(w_path)
+    if policy_sha and policy_sha != actual_sha:
+        raise ValueError(f"LINCS pathway W sha mismatch: policy={policy_sha}, actual={actual_sha}")
+
+    return w
+
+
+def materialize_lincs_subset_pathway_from_gene_projection(
+    *,
+    source_gene_tensor: torch.Tensor,
+    source_row_indices: np.ndarray,
+    pathway_w: np.ndarray,
+    output_path: Path,
+) -> Tuple[int, int]:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    n_rows = int(source_row_indices.size)
+    pathway_dim = int(pathway_w.shape[1])
+    out = np.lib.format.open_memmap(output_path, mode="w+", dtype=np.float32, shape=(n_rows, pathway_dim))
+    for start in range(0, n_rows, LINCS_BATCH_ROWS):
+        end = min(start + LINCS_BATCH_ROWS, n_rows)
+        idx_t = torch.as_tensor(source_row_indices[start:end], dtype=torch.long)
+        gene_block = source_gene_tensor.index_select(0, idx_t).detach().cpu().numpy().astype(np.float32, copy=False)
+        out[start:end] = np.asarray(gene_block @ pathway_w, dtype=np.float32)
+    out.flush()
+    del out
+    return n_rows, pathway_dim
 
 
 def build_representation_availability_registry(coverage_df: pd.DataFrame) -> pd.DataFrame:
@@ -915,20 +995,29 @@ def main() -> int:
     runs_dir = resolve_config_path(project_root, str(config["paths"]["runs_dir"]))
     output_root = resolve_config_path(project_root, str(args.output_root))
 
-    expected_legacy_root = (project_root / EXPECTED_LEGACY_TASK2_SNAPSHOT).resolve()
+    expected_task1_root = resolve_config_path(project_root, str(EXPECTED_TASK1_SNAPSHOT))
+    if task1_snapshot != expected_task1_root:
+        print(
+            "[ERROR] Task1 input mismatch: config.paths.task1_snapshot must resolve "
+            f"to {expected_task1_root}, got {task1_snapshot}",
+            file=sys.stderr,
+        )
+        return 4
+
+    expected_legacy_root = resolve_config_path(project_root, str(EXPECTED_LEGACY_TASK2_SNAPSHOT))
     if legacy_task2_root != expected_legacy_root:
         print(
             "[ERROR] Legacy Task2 input mismatch: config.paths.task2_snapshot must resolve "
             f"to {expected_legacy_root}, got {legacy_task2_root}",
             file=sys.stderr,
         )
-        return 4
+        return 5
     if output_root == legacy_task2_root:
         print(
             f"[ERROR] --output-root must not equal legacy Task2 root {legacy_task2_root}",
             file=sys.stderr,
         )
-        return 5
+        return 6
 
     stage_dir = runs_dir / args.run_id / STAGE
     stage_dir.mkdir(parents=True, exist_ok=True)
@@ -956,7 +1045,10 @@ def main() -> int:
                     "Corrected Task2 v2 writes to explicit --output-root",
                     "config.paths.task2_snapshot remains the legacy v1 input root during migration",
                 ],
+                "task1_snapshot": str(task1_snapshot),
+                "expected_task1_snapshot": str(expected_task1_root),
                 "legacy_task2_root": str(legacy_task2_root),
+                "expected_legacy_task2_root": str(expected_legacy_root),
                 "output_root": str(output_root),
             },
             "counterexamples": [],
@@ -1030,6 +1122,10 @@ def main() -> int:
         gene_tensor, pathway_tensor = load_lincs_tensor_bundle(
             required_lincs_paths["tensor_pt"], expected_rows=len(lincs_meta)
         )
+        pathway_w = load_lincs_pathway_projection_contract(
+            w_path=required_lincs_paths["pathway_w"],
+            policy_path=required_lincs_paths["pathway_policy"],
+        )
     except Exception as exc:
         assertions.append(
             {
@@ -1051,6 +1147,7 @@ def main() -> int:
                 "meta_rows": int(len(lincs_meta)),
                 "gene_tensor_shape": [int(gene_tensor.shape[0]), int(gene_tensor.shape[1])],
                 "pathway_tensor_shape": [int(pathway_tensor.shape[0]), int(pathway_tensor.shape[1])],
+                "corrected_pathway_policy": "project_on_load_from_gene_delta",
             },
             "counterexamples": [],
         }
@@ -1099,8 +1196,7 @@ def main() -> int:
             "name": "lincs_cell_line_normalization_rule",
             "pass": True,
             "details": {
-                "rule_name": "explicit_task2_v2_lincs_cell_line_alias_map",
-                "alias_map": LINCS_CELL_LINE_ALIAS_MAP,
+                "rule_name": "preserve_source_cell_line_labels",
                 "trace_fields": ["cell_line_raw", "cell_line"],
                 "n_rows_normalized": int(len(alias_rows)),
                 "normalized_pairs": alias_counts.to_dict("records"),
@@ -1261,8 +1357,11 @@ def main() -> int:
 
     try:
         gene_stats = materialize_lincs_subset_tensor(gene_tensor, lincs_source_indices, lincs_gene_delta_path)
-        pathway_stats = materialize_lincs_subset_tensor(
-            pathway_tensor, lincs_source_indices, lincs_pathway_delta_path
+        pathway_stats = materialize_lincs_subset_pathway_from_gene_projection(
+            source_gene_tensor=gene_tensor,
+            source_row_indices=lincs_source_indices,
+            pathway_w=pathway_w,
+            output_path=lincs_pathway_delta_path,
         )
     except Exception as exc:
         assertions.append(
@@ -1320,8 +1419,7 @@ def main() -> int:
                 "oe": "Genetic",
             },
             "cell_line_normalization": {
-                "rule_name": "explicit_task2_v2_lincs_cell_line_alias_map",
-                "alias_map": LINCS_CELL_LINE_ALIAS_MAP,
+                "rule_name": "preserve_source_cell_line_labels",
             },
             "source_assets": {
                 "meta_csv": str((lincs_root / "lincs-engine1-meta.csv").resolve()),
@@ -1394,44 +1492,26 @@ def main() -> int:
     inventory_path = (stage_dir / "task2_post_build_inventory.csv").resolve()
     write_csv(inventory, inventory_path)
 
-    lingering_alias_rows: List[Dict[str, object]] = []
-    for output_name, frame in [
-        ("task2_pairs_coverage.csv", combined_coverage.loc[combined_coverage["dataset"].eq("LINCS")]),
-        ("lincs/derived/delta_meta.csv", lincs_delta_meta),
-        ("representation_availability_registry.csv", registry.loc[registry["dataset"].eq("LINCS")]),
-        ("task2_post_build_inventory.csv", inventory.loc[inventory["dataset"].eq("LINCS")]),
-    ]:
-        for raw_alias in LINCS_CELL_LINE_ALIAS_MAP:
-            alias_frame = frame.loc[frame["cell_line"].astype(str).eq(raw_alias)]
-            if alias_frame.empty:
-                continue
-            lingering_alias_rows.append(
-                {
-                    "output": output_name,
-                    "cell_line": raw_alias,
-                    "n_rows": int(len(alias_frame)),
-                }
-            )
+    distinct_lincs_cell_line_labels = sorted(
+        lincs_delta_meta["cell_line"].dropna().astype(str).unique().tolist()
+    )
     assertions.append(
         {
-            "name": "lincs_cell_line_normalization_applied",
-            "pass": len(lingering_alias_rows) == 0,
+            "name": "lincs_cell_line_labels_preserved_from_source",
+            "pass": True,
             "details": {
+                "rule_name": "preserve_source_cell_line_labels",
                 "checked_outputs": [
                     "task2_pairs_coverage.csv",
                     "lincs/derived/delta_meta.csv",
                     "representation_availability_registry.csv",
                     "task2_post_build_inventory.csv",
                 ],
-                "forbidden_normalized_labels": sorted(LINCS_CELL_LINE_ALIAS_MAP.keys()),
+                "observed_distinct_labels": distinct_lincs_cell_line_labels[:MAX_COUNTEREXAMPLES],
+                "n_distinct_labels": int(len(distinct_lincs_cell_line_labels)),
             },
-            "counterexamples": lingering_alias_rows[:MAX_COUNTEREXAMPLES],
         }
     )
-    if lingering_alias_rows:
-        write_json(stage_dir / "audit_assertions.json", {"assertions": assertions})
-        print("[ERROR] LINCS cell-line normalization was not fully applied.", file=sys.stderr)
-        return 13
 
     snapshot_manifest_path = (snapshot_root / "snapshot_manifest.json").resolve()
     source_lineage_manifest_path = (snapshot_root / "source_lineage_manifest.json").resolve()
@@ -1448,8 +1528,7 @@ def main() -> int:
             },
             "cell_line_normalization": {
                 "LINCS": {
-                    "rule_name": "explicit_task2_v2_lincs_cell_line_alias_map",
-                    "alias_map": LINCS_CELL_LINE_ALIAS_MAP,
+                    "rule_name": "preserve_source_cell_line_labels",
                     "trace_fields": ["cell_line_raw", "cell_line"],
                 }
             },
@@ -1486,8 +1565,7 @@ def main() -> int:
             "task1_snapshot": str(task1_snapshot),
             "cell_line_normalization": {
                 "LINCS": {
-                    "rule_name": "explicit_task2_v2_lincs_cell_line_alias_map",
-                    "alias_map": LINCS_CELL_LINE_ALIAS_MAP,
+                    "rule_name": "preserve_source_cell_line_labels",
                 }
             },
             "materialization": lineage_rows,
@@ -1618,8 +1696,7 @@ def main() -> int:
         "lincs_build_summary": {
             **lincs_summary,
             "cell_line_normalization": {
-                "rule_name": "explicit_task2_v2_lincs_cell_line_alias_map",
-                "alias_map": LINCS_CELL_LINE_ALIAS_MAP,
+                "rule_name": "preserve_source_cell_line_labels",
                 "trace_fields": ["cell_line_raw", "cell_line"],
             },
             "gene_delta_shape": [int(gene_stats[0]), int(gene_stats[1])],

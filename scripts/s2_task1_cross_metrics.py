@@ -2,19 +2,19 @@
 # Script: scripts/s2_task1_cross_metrics.py
 # Purpose: Compute Task1 cross matched-pair group and retrieval metrics with deterministic parallelism.
 # Inputs:
-#   - Task1 Snapshot: data/task1_snapshot_v1/
-#   - Cross contract: data/task1_snapshot_v1/cross_contract/cross-pairs-genetic-contract
+#   - Task1 Snapshot: config/config.yaml::paths.task1_snapshot
+#   - Cross contract: config/config.yaml::paths.task1_snapshot/cross_contract/cross-pairs-genetic-contract
 # Outputs:
-#   - task1_cross_retrieval_per_query.parquet: runs/<run_id>/s2_task1_cross_metrics/
-#   - task1_cross_retrieval_summary.csv: runs/<run_id>/s2_task1_cross_metrics/
-#   - task1_cross_chance_identity_check.csv: runs/<run_id>/s2_task1_cross_metrics/
-#   - task1_cross_leaderboard_long.csv: runs/<run_id>/s2_task1_cross_metrics/
-#   - task1_cross_alignment_proof.csv: runs/<run_id>/s2_task1_cross_metrics/
-#   - task1_cross_attrition.csv: runs/<run_id>/s2_task1_cross_metrics/
-#   - task1_group_cross.parquet: runs/<run_id>/s2_task1_cross_metrics/
+#   - task1_cross_retrieval_per_query.parquet: config/config.yaml::paths.runs_dir/<run_id>/s2_task1_cross_metrics/
+#   - task1_cross_retrieval_summary.csv: config/config.yaml::paths.runs_dir/<run_id>/s2_task1_cross_metrics/
+#   - task1_cross_chance_identity_check.csv: config/config.yaml::paths.runs_dir/<run_id>/s2_task1_cross_metrics/
+#   - task1_cross_leaderboard_long.csv: config/config.yaml::paths.runs_dir/<run_id>/s2_task1_cross_metrics/
+#   - task1_cross_alignment_proof.csv: config/config.yaml::paths.runs_dir/<run_id>/s2_task1_cross_metrics/
+#   - task1_cross_attrition.csv: config/config.yaml::paths.runs_dir/<run_id>/s2_task1_cross_metrics/
+#   - task1_group_cross.parquet: config/config.yaml::paths.runs_dir/<run_id>/s2_task1_cross_metrics/
 #   - AVCP Artifacts: run_manifest.json, audit_assertions.json, manifest.json
 # Side Effects:
-#   - Creates isolated run directory: runs/<run_id>/s2_task1_cross_metrics/
+#   - Creates isolated run directory under config/config.yaml::paths.runs_dir
 # Config Dependencies:
 #   - config/config.yaml::project.seed
 #   - config/config.yaml::paths.task1_snapshot
@@ -27,9 +27,16 @@
 #   - Chance identity check tolerance > 1e-12 -> exit non-zero
 # Last Updated: 2026-03-05
 
+# Pipeline Status:
+#   - active canonical pipeline
+# Manuscript Role:
+#   - primary Task1 cross benchmark evidence feeding Figure 2 canon
+# Architecture:
+#   - see scripts/ARCHITECTURE.md for canonical vs support vs historical script families
+
 """
 Inputs:
-- task1 snapshot files under data/task1_snapshot_v1/ only:
+- task1 snapshot files under config/config.yaml::paths.task1_snapshot only:
   - lincs/lincs-engine1-meta.csv
   - lincs/lincs-engine1-gene-delta.pt
   - pathway/hallmark-w-2477x50.npy
@@ -86,9 +93,14 @@ import pyarrow.parquet as pq
 import torch
 import yaml
 
+try:
+    from path_policy import DEFAULT_TASK1_SNAPSHOT_ROOT, resolve_path
+except ModuleNotFoundError:
+    from scripts.path_policy import DEFAULT_TASK1_SNAPSHOT_ROOT, resolve_path
+
 STAGE = "s2_task1_cross_metrics"
 CONFIG_PATH = Path("config/config.yaml")
-EXPECTED_TASK1_SNAPSHOT = Path("data/task1_snapshot_v1")
+EXPECTED_TASK1_SNAPSHOT = DEFAULT_TASK1_SNAPSHOT_ROOT
 
 GLOBAL_SEED = 619
 EDIST_MAX_N = 256
@@ -538,7 +550,7 @@ def locate_cross_contract_file(snapshot_root: Path) -> Path:
         if candidate.is_file():
             return candidate
     raise FileNotFoundError(
-        "Missing cross_pairs_genetic_contract file under data/task1_snapshot_v1/cross_contract/"
+        "Missing cross_pairs_genetic_contract file under the configured task1 snapshot cross_contract/"
     )
 
 
@@ -1228,10 +1240,10 @@ def main() -> int:
         print(f"[ERROR] --workers must be >=1, got {workers}", file=sys.stderr)
         return 12
 
-    task1_snapshot = (project_root / config["paths"]["task1_snapshot"]).resolve()
-    runs_dir = (project_root / config["paths"]["runs_dir"]).resolve()
+    task1_snapshot = resolve_path(project_root, config["paths"]["task1_snapshot"])
+    runs_dir = resolve_path(project_root, config["paths"]["runs_dir"])
 
-    expected_snapshot = (project_root / EXPECTED_TASK1_SNAPSHOT).resolve()
+    expected_snapshot = resolve_path(project_root, EXPECTED_TASK1_SNAPSHOT)
     if task1_snapshot != expected_snapshot:
         print(
             "[ERROR] Data isolation violation: config.paths.task1_snapshot must resolve "
@@ -1260,10 +1272,11 @@ def main() -> int:
             "pass": True,
             "details": {
                 "rules": [
-                    "S2 reads exclusively from data/task1_snapshot_v1/",
-                    "config.paths.task1_snapshot must equal data/task1_snapshot_v1",
+                    "S2 reads exclusively from the authoritative Task1 snapshot root.",
+                    "config.paths.task1_snapshot must equal the authoritative Task1 snapshot root.",
                 ],
                 "task1_snapshot": str(task1_snapshot),
+                "expected_task1_snapshot": str(expected_snapshot),
             },
             "counterexamples": [],
         }
@@ -1834,7 +1847,7 @@ def main() -> int:
             "pass": len(bad_inputs) == 0,
             "details": {
                 "rules": [
-                    "All loaded inputs must be under data/task1_snapshot_v1/ lexical namespace",
+                    "All loaded inputs must be under the configured task1 snapshot lexical namespace",
                 ],
                 "task1_snapshot": str(task1_snapshot),
                 "n_inputs": int(len(input_paths)),

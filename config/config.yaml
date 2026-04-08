@@ -8,12 +8,16 @@ project:
 paths:
   # 外部/原始输入源 (Read-only)
   raw_k562_dir: "/mnt/NAS_21T/ProjectData/Chem2Gen/Benchmark_Datasets/Evaluation_Set_K562"
+  osmosis_lincs_raw: "/mnt/NAS_21T/ProjectData/OSMOSIS/raw/CMap_LINCS/LINCS_level5"
+  osmosis_scperturb_raw: "/mnt/NAS_21T/ProjectData/OSMOSIS/raw/scPerturb_Processed"
   
-  # 内部快照与运行结果 (Managed by pipeline)
-  task1_snapshot: "data/task1_snapshot_v1"
-  task2_snapshot: "data/task2_snapshot_v1"  # legacy/interim scPerturb-K562 snapshot; reused by legacy Task2 scripts and corrected multisource S3
-  task2_snapshot_corrected: "data/task2_snapshot_v2"  # corrected multisource Task2 successor root materialized locally
-  runs_dir: "runs"  # 本地兼容路径；当前可通过 NAS-backed symlink 保持可用
+  # NAS-backed 快照与运行结果 (Managed by pipeline)
+  task1_snapshot: "/mnt/NAS_21T/ProjectData/M2M/snapshots/task1_snapshot_v1"
+  task1_snapshot_candidate: "/mnt/NAS_21T/ProjectData/M2M/snapshots/task1_snapshot_v2_candidate"
+  task2_snapshot: "/mnt/NAS_21T/ProjectData/M2M/snapshots/task2_snapshot_v1"  # legacy/interim scPerturb-K562 snapshot; reused by legacy Task2 scripts and corrected multisource S3
+  task2_snapshot_corrected: "/mnt/NAS_21T/ProjectData/M2M/snapshots/task2_snapshot_v2"  # corrected multisource Task2 successor root
+  task2_snapshot_candidate: "/mnt/NAS_21T/ProjectData/M2M/snapshots/task2_snapshot_v3_candidate"
+  runs_dir: "/mnt/NAS_21T/ProjectData/M2M/runs"
 
 compute:
   edist_max_n: 256

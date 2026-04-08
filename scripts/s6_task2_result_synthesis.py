@@ -3,6 +3,12 @@
 # Legacy note:
 #   - Preserved historical scPerturb-K562 S6 artifact.
 #   - Corrected multisource Task2 S6 synthesis now lives in scripts/s6_task2_result_synthesis_multisource.py.
+# Status:
+#   - historical/deprecated but retained
+# Canonical Successor:
+#   - scripts/s6_task2_result_synthesis_multisource.py
+# Manuscript Role:
+#   - retained for historical reconstruction only; not live Figure 2/3 canon
 # Purpose: Synthesize legacy/interim audited Task2 S4/S5 outputs into benchmark-ready summary tables without recomputing metrics.
 # Inputs:
 #   - S4 audited stage dir with:

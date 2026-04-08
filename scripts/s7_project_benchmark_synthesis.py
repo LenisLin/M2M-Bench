@@ -50,6 +50,13 @@
 #   - Unique-key / sort-order / percentile / caution aggregation drift -> exit non-zero
 # Last Updated: 2026-03-11
 
+# Pipeline Status:
+#   - active canonical pipeline
+# Manuscript Role:
+#   - project-level synthesis/context only; not primary Figure 2/3 evidence
+# Architecture:
+#   - see scripts/ARCHITECTURE.md for canonical vs support vs historical script families
+
 """
 Inputs:
 - audited Task1 S1/S2 reporting-stage outputs only

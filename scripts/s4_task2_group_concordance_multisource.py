@@ -3,24 +3,24 @@
 # Script: scripts/s4_task2_group_concordance_multisource.py
 # Purpose: Compute corrected Task2 multisource group concordance per eligible
 #   dataset/cell_line/target_token/representation from the audited
-#   data/task2_snapshot_v2 snapshot only.
+#   config/config.yaml::paths.task2_corrected_snapshot only.
 # Inputs:
-#   - data/task2_snapshot_v2/snapshot_manifest.json
-#   - data/task2_snapshot_v2/task2_pairs_coverage.csv
-#   - data/task2_snapshot_v2/representation_availability_registry.csv
-#   - data/task2_snapshot_v2/lincs/task2_lincs_pairs.csv
-#   - data/task2_snapshot_v2/lincs/derived/{delta_meta.csv,task2_row_membership.parquet,gene_delta.npy,pathway_delta.npy}
-#   - data/task2_snapshot_v2/scperturb_k562/Common_Targets_K562.csv
-#   - data/task2_snapshot_v2/scperturb_k562/derived/{delta_meta.csv,task2_row_membership.parquet,gene_delta.npy,pathway_delta.npy}
-#   - data/task2_snapshot_v2/scperturb_k562/fm/<model>/{fm_delta.npy,fm_delta_meta.csv,delta_operator_policy.json}
+#   - config/config.yaml::paths.task2_corrected_snapshot/snapshot_manifest.json
+#   - config/config.yaml::paths.task2_corrected_snapshot/task2_pairs_coverage.csv
+#   - config/config.yaml::paths.task2_corrected_snapshot/representation_availability_registry.csv
+#   - config/config.yaml::paths.task2_corrected_snapshot/lincs/task2_lincs_pairs.csv
+#   - config/config.yaml::paths.task2_corrected_snapshot/lincs/derived/{delta_meta.csv,task2_row_membership.parquet,gene_delta.npy,pathway_delta.npy}
+#   - config/config.yaml::paths.task2_corrected_snapshot/scperturb_k562/Common_Targets_K562.csv
+#   - config/config.yaml::paths.task2_corrected_snapshot/scperturb_k562/derived/{delta_meta.csv,task2_row_membership.parquet,gene_delta.npy,pathway_delta.npy}
+#   - config/config.yaml::paths.task2_corrected_snapshot/scperturb_k562/fm/<model>/{fm_delta.npy,fm_delta_meta.csv,delta_operator_policy.json}
 # Outputs:
-#   - runs/<run_id>/s4_task2_group_concordance_multisource/task2_group_concordance.csv
-#   - runs/<run_id>/s4_task2_group_concordance_multisource/task2_group_attrition.csv
-#   - runs/<run_id>/s4_task2_group_concordance_multisource/run_manifest.json
-#   - runs/<run_id>/s4_task2_group_concordance_multisource/audit_assertions.json
-#   - runs/<run_id>/s4_task2_group_concordance_multisource/manifest.json
+#   - config/config.yaml::paths.runs_dir/<run_id>/s4_task2_group_concordance_multisource/task2_group_concordance.csv
+#   - config/config.yaml::paths.runs_dir/<run_id>/s4_task2_group_concordance_multisource/task2_group_attrition.csv
+#   - config/config.yaml::paths.runs_dir/<run_id>/s4_task2_group_concordance_multisource/run_manifest.json
+#   - config/config.yaml::paths.runs_dir/<run_id>/s4_task2_group_concordance_multisource/audit_assertions.json
+#   - config/config.yaml::paths.runs_dir/<run_id>/s4_task2_group_concordance_multisource/manifest.json
 # Side Effects:
-#   - Creates isolated run directory: runs/<run_id>/s4_task2_group_concordance_multisource/
+#   - Creates isolated run directory under config/config.yaml::paths.runs_dir
 # Config Dependencies:
 #   - config/config.yaml::project.seed
 #   - config/config.yaml::paths.runs_dir
@@ -28,16 +28,23 @@
 # Execution:
 #   - python scripts/s4_task2_group_concordance_multisource.py --run-id <run_id> --seed 619 --workers 8
 # Failure Modes:
-#   - Snapshot root is not data/task2_snapshot_v2 -> exit non-zero
+#   - Snapshot root is not config/config.yaml::paths.task2_corrected_snapshot -> exit non-zero
 #   - Missing required snapshot files -> exit non-zero
 #   - Coverage / registry / schema / key / scope drift -> exit non-zero
-#   - Representation validation failure or forbidden 1HAE analysis label -> exit non-zero
+#   - Representation validation failure -> exit non-zero
 #   - Supported analysis grid row count mismatch -> exit non-zero
 # Last Updated: 2026-03-10
 
+# Pipeline Status:
+#   - active canonical pipeline
+# Manuscript Role:
+#   - primary Task2 group benchmark evidence feeding Figure 3 canon
+# Architecture:
+#   - see scripts/ARCHITECTURE.md for canonical vs support vs historical script families
+
 """
 Inputs:
-- corrected Task2 multisource snapshot under data/task2_snapshot_v2/
+- corrected Task2 multisource snapshot under config/config.yaml::paths.task2_corrected_snapshot
 
 Outputs:
 - task2_group_concordance.csv
@@ -79,9 +86,14 @@ import numpy as np
 import pandas as pd
 import yaml
 
+try:
+    from path_policy import DEFAULT_TASK2_CORRECTED_SNAPSHOT_ROOT
+except ModuleNotFoundError:
+    from scripts.path_policy import DEFAULT_TASK2_CORRECTED_SNAPSHOT_ROOT
+
 STAGE = "s4_task2_group_concordance_multisource"
 CONFIG_PATH = Path("config/config.yaml")
-EXPECTED_TASK2_SNAPSHOT = Path("data/task2_snapshot_v2")
+EXPECTED_TASK2_SNAPSHOT = DEFAULT_TASK2_CORRECTED_SNAPSHOT_ROOT
 
 GLOBAL_SEED = 619
 EDIST_MAX_N = 256
@@ -105,7 +117,6 @@ METRIC_ORDER: Tuple[str, ...] = ("ALL", "cosine_centroid", "pcc_centroid", "edis
 
 STATUS_AVAILABLE = "available"
 STATUS_NOT_APPLICABLE = "not_applicable_scope"
-FORBIDDEN_ANALYSIS_CELL_LINE = "1HAE"
 
 FROZEN_AVAILABLE_REPRESENTATIONS: Mapping[str, Tuple[str, ...]] = {
     "LINCS": ("Gene", "Pathway"),
@@ -329,14 +340,9 @@ def normalize_text_series(series: pd.Series) -> pd.Series:
 
 
 def fail_on_forbidden_cell_line(frame: pd.DataFrame, columns: Sequence[str], name: str) -> None:
-    for column in columns:
-        if column not in frame.columns:
-            continue
-        values = normalize_text_series(frame[column])
-        bad = frame.loc[values.eq(FORBIDDEN_ANALYSIS_CELL_LINE), column]
-        if not bad.empty:
-            examples = bad.drop_duplicates().head(MAX_COUNTEREXAMPLES).tolist()
-            raise ValueError(f"{name} contains forbidden analysis cell_line {FORBIDDEN_ANALYSIS_CELL_LINE}: {examples}")
+    # `1HAE` and `HA1E` are treated as distinct biological labels in the current
+    # review-approved contract, so no analysis-facing cell line is forbidden.
+    return None
 
 
 def cosine_similarity(a: np.ndarray, b: np.ndarray) -> Tuple[float, str]:
@@ -529,9 +535,6 @@ def load_snapshot_manifest(snapshot_root: Path) -> Tuple[Mapping[str, Any], List
         dataset_info = datasets[dataset]
         if dataset_info.get("representations") != list(FROZEN_AVAILABLE_REPRESENTATIONS[dataset]):
             raise ValueError(f"snapshot_manifest.json representations drift for dataset={dataset}")
-        cell_lines = dataset_info.get("cell_lines", [])
-        if FORBIDDEN_ANALYSIS_CELL_LINE in cell_lines:
-            raise ValueError(f"snapshot_manifest.json contains forbidden analysis cell_line {FORBIDDEN_ANALYSIS_CELL_LINE}")
     return manifest, [manifest_path]
 
 
@@ -853,10 +856,19 @@ def load_delta_meta(
     return delta_meta, [delta_meta_path]
 
 
-def build_membership_from_delta_meta(dataset: str, delta_meta: pd.DataFrame) -> pd.DataFrame:
+def build_membership_from_delta_meta(
+    dataset: str,
+    delta_meta: pd.DataFrame,
+    eligible_coverage_subset: pd.DataFrame,
+) -> pd.DataFrame:
+    eligible_lookup: Dict[str, set[str]] = {
+        str(cell_line): set(group["target_token"].astype(str).tolist())
+        for cell_line, group in eligible_coverage_subset.groupby("cell_line", sort=False)
+    }
     rows: List[Dict[str, object]] = []
     for row in delta_meta.itertuples(index=False):
         tokens = row.parsed_target_tokens
+        eligible_tokens = tuple(token for token in tokens if token in eligible_lookup.get(str(row.cell_line), set()))
         base = {
             "row_id": int(row.row_id),
             "treated_cell_id": row.treated_cell_id,
@@ -868,7 +880,8 @@ def build_membership_from_delta_meta(dataset: str, delta_meta: pd.DataFrame) -> 
         if dataset == "LINCS":
             base["source_row_index"] = int(row.source_row_index)
             base["cell_line_raw"] = row.cell_line_raw
-        for token in tokens if row.perturbation_class == "Chemical" else (tokens[0],):
+        membership_tokens = eligible_tokens if row.perturbation_class == "Chemical" else eligible_tokens[:1]
+        for token in membership_tokens:
             out_row = dict(base)
             out_row["target_token"] = token
             rows.append(out_row)
@@ -1547,10 +1560,14 @@ def main() -> int:
         return 4
 
     runs_dir = resolve_config_path(project_root, str(config["paths"]["runs_dir"]))
-    task2_snapshot = (project_root / EXPECTED_TASK2_SNAPSHOT).resolve()
-    expected_snapshot = (project_root / EXPECTED_TASK2_SNAPSHOT).resolve()
+    task2_snapshot = resolve_config_path(project_root, str(config["paths"]["task2_snapshot_corrected"]))
+    expected_snapshot = resolve_config_path(project_root, str(EXPECTED_TASK2_SNAPSHOT))
     if task2_snapshot != expected_snapshot:
-        print("[ERROR] Snapshot isolation check failed unexpectedly.", file=sys.stderr)
+        print(
+            "[ERROR] Snapshot isolation violation: config.paths.task2_snapshot_corrected must resolve "
+            f"to {expected_snapshot}, got {task2_snapshot}",
+            file=sys.stderr,
+        )
         return 5
     if not task2_snapshot.is_dir():
         print(f"[ERROR] Missing corrected Task2 snapshot root: {task2_snapshot}", file=sys.stderr)
@@ -1583,8 +1600,11 @@ def main() -> int:
             "name": "task2_snapshot_v2_isolation",
             "pass": True,
             "details": {
-                "rules": ["S4 reads exclusively from data/task2_snapshot_v2/"],
+                "rules": [
+                    "S4 reads exclusively from the authoritative corrected Task2 snapshot root.",
+                ],
                 "task2_snapshot": str(task2_snapshot),
+                "expected_task2_snapshot": str(expected_snapshot),
             },
             "counterexamples": [],
         }
@@ -1726,7 +1746,7 @@ def main() -> int:
             input_paths.extend(delta_inputs)
             fail_on_forbidden_cell_line(delta_meta, ["cell_line"], f"{dataset} delta_meta.csv")
 
-            exploded_membership = build_membership_from_delta_meta(dataset, delta_meta)
+            exploded_membership = build_membership_from_delta_meta(dataset, delta_meta, eligible_subset)
             parity_membership, parity_inputs = load_membership_parity_table(dataset, task2_snapshot / bundle.membership_relpath)
             input_paths.extend(parity_inputs)
             validate_membership_parity(

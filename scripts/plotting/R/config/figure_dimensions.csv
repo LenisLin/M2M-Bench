@@ -1,0 +1,13 @@
+figure_id,default_width_mm,width_hard_limit_mm,default_height_mm,height_policy,orientation,split_before_render,export_filename_pattern
+figure1,178,180,125,"Base 125 mm; increase by 10 mm if legend or footer wraps beyond one line.",landscape,false,figure1/figure1.pdf
+figure2,178,180,150,"Base 150 mm; allow +12 mm per extra patchwork row added for label density.",landscape,false,figure2/figure2.pdf
+figure3,178,180,155,"Base 155 mm; allow +12 mm per extra patchwork row added for label density.",landscape,false,figure3/figure3.pdf
+extended_figure1,178,180,220,"Base 220 mm; registry-heavy layout, shrink only after readability check.",portrait,false,extended_figure1/extended_figure1.pdf
+extended_figure2,178,180,160,"Base 160 mm; adjust +10 mm if strip labels exceed one line.",landscape,false,extended_figure2/extended_figure2.pdf
+extended_figure3,178,180,165,"Base 165 mm; adjust +10 mm if degradation/footer block wraps.",landscape,false,extended_figure3/extended_figure3.pdf
+extended_figure4,178,180,200,"Base 200 mm; adjust +10 to 20 mm for rank-label crowding.",landscape,false,extended_figure4/extended_figure4.pdf
+extended_figure5,178,180,180,"Base 180 mm; adjust +10 mm if direction strips or legends wrap.",landscape,false,extended_figure5/extended_figure5.pdf
+extended_figure6,178,180,210,"Base 210 mm; adjust +10 to 20 mm for target-rank density.",landscape,false,extended_figure6/extended_figure6.pdf
+extended_figure7,178,180,170,"Base 170 mm; adjust +10 mm if modifier facet labels wrap.",landscape,false,extended_figure7/extended_figure7.pdf
+extended_figure8,178,180,210,"Base 210 mm; adjust +10 to 20 mm for FM-local plus contextual support density.",landscape,false,extended_figure8/extended_figure8.pdf
+extended_figure9,178,180,215,"Base 215 mm; adjust +10 mm if exemplar labels or support annotations wrap.",landscape,false,extended_figure9/extended_figure9.pdf

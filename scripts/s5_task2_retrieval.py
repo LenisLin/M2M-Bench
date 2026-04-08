@@ -3,6 +3,12 @@
 # Legacy note:
 #   - Preserved historical scPerturb-K562 S5 artifact with context-based G2C semantics.
 #   - Corrected multisource Task2 S5 target-level semantics live in docs/contracts/task2_spec.md, docs/contracts/output-schemas.md, and scripts/s5_task2_retrieval_multisource.py.
+# Status:
+#   - historical/deprecated but retained
+# Canonical Successor:
+#   - scripts/s5_task2_retrieval_multisource.py
+# Manuscript Role:
+#   - retained for historical reconstruction only; not live Figure 2/3 canon
 # Purpose: 计算 legacy/interim Task2 实例级双向检索指标 (C2G, G2C) 及其 multi-positive chance-correction
 # Inputs:
 #   - Task2 Snapshot K562: config/config.yaml::paths.task2_snapshot
