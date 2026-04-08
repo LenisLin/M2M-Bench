@@ -210,7 +210,11 @@ Randomness is initialized once per script using `GLOBAL_SEED`. No derived seeds.
 For each Chemical instance:
 
 * `target_raw = clean_target_mapped`
-* `target_tokens = unique(sorted(split(target_raw, ';', strip=True)))`
+* source-native tokenization may differ by dataset:
+  * LINCS chemical sources use `|`
+  * scPerturb chemical sources may use `_`
+  * `;` remains an accepted compatibility delimiter for already-normalized snapshots
+* canonical snapshot field `target_tokens` must be written as a normalized `;`-joined token list after source-aware parsing
 * `n_targets = len(target_tokens)`
 * retain any available metadata such as `specificity_tier`, `time`, and `dose_value`
 
@@ -251,7 +255,10 @@ LINCS inclusion requires all of the following for the same source dataset:
 
 `task2_lincs_pairs.csv` is the gating list of eligible LINCS analysis/cohort
 keys. LINCS retains `time` and `dose_value` as instance metadata where present,
-but those fields do not enter the Task2 analysis/cohort key.
+but those fields do not enter the Task2 analysis/cohort key. For multi-target
+chemicals, `delta_meta.target_tokens` must preserve the full source-level token
+set; eligibility filtering only constrains exploded cohort membership, not the
+stored instance identity.
 
 ### 6.2 scPerturb K562 build
 

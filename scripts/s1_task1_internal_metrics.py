@@ -2,16 +2,16 @@
 # Script: scripts/s1_task1_internal_metrics.py
 # Purpose: 计算 Task1 internal 组级一致性与检索指标 (Modality Concordance)
 # Inputs:
-#   - Task1 Snapshot: data/task1_snapshot_v1/
+#   - Task1 Snapshot: config/config.yaml::paths.task1_snapshot
 # Outputs:
-#   - task1_retrieval_per_query.parquet: runs/<run_id>/s1_task1_internal_metrics/
-#   - task1_retrieval_summary.csv: runs/<run_id>/s1_task1_internal_metrics/
-#   - task1_chance_identity_check.csv: runs/<run_id>/s1_task1_internal_metrics/
-#   - task1_leaderboard_long.csv: runs/<run_id>/s1_task1_internal_metrics/
-#   - task1_attrition.csv: runs/<run_id>/s1_task1_internal_metrics/
+#   - task1_retrieval_per_query.parquet: config/config.yaml::paths.runs_dir/<run_id>/s1_task1_internal_metrics/
+#   - task1_retrieval_summary.csv: config/config.yaml::paths.runs_dir/<run_id>/s1_task1_internal_metrics/
+#   - task1_chance_identity_check.csv: config/config.yaml::paths.runs_dir/<run_id>/s1_task1_internal_metrics/
+#   - task1_leaderboard_long.csv: config/config.yaml::paths.runs_dir/<run_id>/s1_task1_internal_metrics/
+#   - task1_attrition.csv: config/config.yaml::paths.runs_dir/<run_id>/s1_task1_internal_metrics/
 #   - AVCP Artifacts: run_manifest.json, audit_assertions.json, manifest.json
 # Side Effects:
-#   - Creates isolated run directory: runs/<run_id>/s1_task1_internal_metrics/
+#   - Creates isolated run directory under config/config.yaml::paths.runs_dir
 # Config Dependencies:
 #   - config/config.yaml::project.seed
 #   - config/config.yaml::paths.task1_snapshot
@@ -23,9 +23,16 @@
 #   - Chance identity check tolerance > 1e-12 -> exit non-zero
 # Last Updated: 2026-03-03
 
+# Pipeline Status:
+#   - active canonical pipeline
+# Manuscript Role:
+#   - primary Task1 internal benchmark evidence feeding Figure 2 canon
+# Architecture:
+#   - see scripts/ARCHITECTURE.md for canonical vs support vs historical script families
+
 """
 Inputs:
-- task1 snapshot files under data/task1_snapshot_v1/ only:
+- task1 snapshot files under config/config.yaml::paths.task1_snapshot only:
   - lincs/lincs-engine1-meta.csv
   - lincs/lincs-engine1-gene-delta.pt
   - scperturb_delta/*.csv, *.npy
@@ -80,9 +87,14 @@ import pyarrow.parquet as pq
 import torch
 import yaml
 
+try:
+    from path_policy import DEFAULT_TASK1_SNAPSHOT_ROOT, resolve_path
+except ModuleNotFoundError:
+    from scripts.path_policy import DEFAULT_TASK1_SNAPSHOT_ROOT, resolve_path
+
 STAGE = "s1_task1_internal_metrics"
 CONFIG_PATH = Path("config/config.yaml")
-EXPECTED_TASK1_SNAPSHOT = Path("data/task1_snapshot_v1")
+EXPECTED_TASK1_SNAPSHOT = DEFAULT_TASK1_SNAPSHOT_ROOT
 
 GLOBAL_SEED = 619
 EDIST_MAX_N = 256
@@ -509,18 +521,43 @@ def load_lincs_inputs(snapshot_root: Path) -> Tuple[pd.DataFrame, VectorStore, n
 
 def load_scperturb_inputs(snapshot_root: Path) -> Tuple[Dict[str, pd.DataFrame], Dict[str, VectorStore], Dict[str, VectorStore], List[Path]]:
     drug_meta_path = snapshot_root / "scperturb_delta/scperturb-drug-delta-meta.csv"
+    chemical_meta_path = snapshot_root / "scperturb_delta/scperturb-chemical-delta-meta.csv"
     crispr_meta_path = snapshot_root / "scperturb_delta/scperturb-crispr-delta-meta.csv"
 
     drug_gene_path = snapshot_root / "scperturb_delta/scperturb-drug-gene-delta.npy"
     drug_pathway_path = snapshot_root / "scperturb_delta/scperturb-drug-pathway-delta.npy"
+    chemical_gene_path = snapshot_root / "scperturb_delta/scperturb-chemical-gene-delta.npy"
+    chemical_pathway_path = snapshot_root / "scperturb_delta/scperturb-chemical-pathway-delta.npy"
     crispr_gene_path = snapshot_root / "scperturb_delta/scperturb-crispr-gene-delta.npy"
     crispr_pathway_path = snapshot_root / "scperturb_delta/scperturb-crispr-pathway-delta.npy"
 
-    required_meta_cols = ["delta_row_idx", "target_std", "cell_std", "dose_val", "time_val", "pert_type"]
+    if chemical_meta_path.is_file():
+        drug_meta_path = chemical_meta_path
+        drug_gene_path = chemical_gene_path
+        drug_pathway_path = chemical_pathway_path
+
     drug_meta = pd.read_csv(drug_meta_path)
     crispr_meta = pd.read_csv(crispr_meta_path)
-    ensure_required_columns(drug_meta, required_meta_cols, "scperturb-drug-delta-meta.csv")
-    ensure_required_columns(crispr_meta, required_meta_cols, "scperturb-crispr-delta-meta.csv")
+
+    def _normalize_meta(frame: pd.DataFrame, name: str, fallback_subtype: str) -> pd.DataFrame:
+        target_col = "target_std" if "target_std" in frame.columns else "target_tokens"
+        cell_col = "cell_std" if "cell_std" in frame.columns else "cell_line_raw"
+        dose_col = "dose_val" if "dose_val" in frame.columns else "dose_value"
+        time_col = "time_val" if "time_val" in frame.columns else "time"
+        required_meta_cols = ["delta_row_idx", target_col, cell_col, dose_col, time_col]
+        ensure_required_columns(frame, required_meta_cols, name)
+        normalized = frame.copy()
+        if "perturbation_subtype" not in normalized.columns:
+            normalized["perturbation_subtype"] = fallback_subtype
+        normalized["target_std"] = normalize_text(normalized[target_col]).str.replace(";", ";", regex=False)
+        normalized["cell_std"] = normalize_text(normalized[cell_col])
+        normalized["dose_val"] = normalized[dose_col]
+        normalized["time_val"] = normalized[time_col]
+        normalized["pert_type"] = normalized.get("pert_type", normalized["perturbation_subtype"])
+        return normalized
+
+    drug_meta = _normalize_meta(drug_meta, drug_meta_path.name, "Chemical")
+    crispr_meta = _normalize_meta(crispr_meta, crispr_meta_path.name, "CRISPR")
 
     for name, frame in [("drug", drug_meta), ("crispr", crispr_meta)]:
         if frame["delta_row_idx"].duplicated().any():
@@ -547,15 +584,15 @@ def load_scperturb_inputs(snapshot_root: Path) -> Tuple[Dict[str, pd.DataFrame],
 
     meta_map = {
         "Chemical": drug_meta,
-        "Genetic": crispr_meta,
+        "CRISPR": crispr_meta,
     }
     gene_store_map = {
         "Chemical": drug_gene,
-        "Genetic": crispr_gene,
+        "CRISPR": crispr_gene,
     }
     pathway_store_map = {
         "Chemical": drug_pathway,
-        "Genetic": crispr_pathway,
+        "CRISPR": crispr_pathway,
     }
     input_paths = [
         drug_meta_path,
@@ -683,11 +720,17 @@ def build_cohorts(snapshot_root: Path) -> Tuple[List[CohortData], List[Path], Di
     input_paths: List[Path] = []
 
     # LINCS: gene + pathway(project_on_load), no FM.
-    lincs_pert = lincs_meta["pert_type"].map(normalize_perturbation_type)
+    if "perturbation_subtype" in lincs_meta.columns:
+        lincs_pert = normalize_text(lincs_meta["perturbation_subtype"])
+        lincs_target = normalize_text(lincs_meta.get("target_tokens", lincs_meta.get("target", pd.Series(dtype=object))))
+        lincs_target = lincs_target.map(lambda value: value if value else "NA")
+    else:
+        lincs_pert = lincs_meta["pert_type"].map(normalize_perturbation_type)
+        lincs_target = normalize_text(lincs_meta["target"])
     lincs_base = pd.DataFrame(
         {
             "cell_line": normalize_text(lincs_meta["cell_line"]),
-            "target": normalize_text(lincs_meta["target"]),
+            "target": lincs_target,
             "dose_val": lincs_meta["dose_val"],
             "time_val": lincs_meta["time_val"],
             "perturbation_type": lincs_pert,
@@ -699,7 +742,8 @@ def build_cohorts(snapshot_root: Path) -> Tuple[List[CohortData], List[Path], Di
 
     lincs_pathway_store = ProjectedPathwayStore(lincs_gene_store, pathway_w)
 
-    for perturbation_type in ["Chemical", "Genetic"]:
+    lincs_subtypes = [subtype for subtype in ["Chemical", "CRISPR", "sh"] if lincs_base["perturbation_type"].eq(subtype).any()]
+    for perturbation_type in lincs_subtypes:
         subset = lincs_base.loc[lincs_base["perturbation_type"] == perturbation_type].copy()
         meta = subset[
             [
@@ -739,7 +783,7 @@ def build_cohorts(snapshot_root: Path) -> Tuple[List[CohortData], List[Path], Di
         )
 
     # scPerturb: gene + pathway.
-    for perturbation_type in ["Chemical", "Genetic"]:
+    for perturbation_type in [subtype for subtype in ["Chemical", "CRISPR"] if subtype in sc_meta_map]:
         src = sc_meta_map[perturbation_type]
         normalized = pd.DataFrame(
             {
@@ -1405,14 +1449,19 @@ def main() -> int:
         )
         return 3
 
-    task1_snapshot = (project_root / config["paths"]["task1_snapshot"]).resolve()
-    runs_dir = (project_root / config["paths"]["runs_dir"]).resolve()
+    task1_snapshot_key = "task1_snapshot_candidate" if "task1_snapshot_candidate" in config["paths"] else "task1_snapshot"
+    task1_snapshot = resolve_path(project_root, config["paths"][task1_snapshot_key])
+    runs_dir = resolve_path(project_root, config["paths"]["runs_dir"])
 
-    expected_snapshot = (project_root / EXPECTED_TASK1_SNAPSHOT).resolve()
-    if task1_snapshot != expected_snapshot:
+    expected_snapshot = resolve_path(project_root, EXPECTED_TASK1_SNAPSHOT)
+    expected_candidate_snapshot = resolve_path(
+        project_root,
+        config["paths"].get("task1_snapshot_candidate", EXPECTED_TASK1_SNAPSHOT),
+    )
+    if task1_snapshot not in {expected_snapshot, expected_candidate_snapshot}:
         print(
-            "[ERROR] Data isolation violation: config.paths.task1_snapshot must resolve "
-            f"to {expected_snapshot}, got {task1_snapshot}",
+            "[ERROR] Data isolation violation: task1 snapshot must resolve "
+            f"to one of [{expected_snapshot}, {expected_candidate_snapshot}], got {task1_snapshot}",
             file=sys.stderr,
         )
         return 4
@@ -1434,10 +1483,11 @@ def main() -> int:
             "pass": True,
             "details": {
                 "rules": [
-                    "S1 reads exclusively from data/task1_snapshot_v1/",
-                    "config.paths.task1_snapshot must equal data/task1_snapshot_v1",
+                    "S1 reads exclusively from the authoritative frozen Task1 snapshot root or the candidate raw-driven root.",
                 ],
                 "task1_snapshot": str(task1_snapshot),
+                "expected_task1_snapshot": str(expected_snapshot),
+                "expected_task1_candidate_snapshot": str(expected_candidate_snapshot),
             },
             "counterexamples": [],
         }
@@ -1691,7 +1741,7 @@ def main() -> int:
             "pass": len(bad_inputs) == 0,
             "details": {
                 "rules": [
-                    "All loaded inputs must be under data/task1_snapshot_v1/ path namespace",
+                    "All loaded inputs must be under the configured task1 snapshot root namespace",
                 ],
                 "task1_snapshot": str(task1_snapshot),
                 "n_inputs": len(input_paths),

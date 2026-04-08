@@ -3,6 +3,12 @@
 # Legacy note:
 #   - Preserved historical scPerturb-K562 S3 artifact.
 #   - Corrected multisource Task2 snapshot materialization now lives in scripts/s3_build_task2_multisource_snapshot.py.
+# Status:
+#   - historical/deprecated but retained
+# Canonical Successor:
+#   - scripts/s3_build_task2_multisource_snapshot.py
+# Manuscript Role:
+#   - retained for historical reconstruction only; not live Figure 2/3 canon
 # Purpose: Build deterministic legacy/interim Task2 K562 core snapshot artifacts (pairing + Gene/Pathway deltas) without FM extraction.
 # Inputs:
 #   - Raw K562 Data: config/config.yaml::paths.raw_k562_dir
@@ -262,13 +268,15 @@ def to_float_or_nan(value: object) -> float:
     return float(value)
 
 
-def tokenize_target(raw_target: object) -> Tuple[str, ...]:
+def tokenize_target(raw_target: object, *, delimiters: Sequence[str]) -> Tuple[str, ...]:
     raw = normalize_scalar(raw_target, default="NA")
-    tokens: List[str] = []
-    for chunk in raw.split(";"):
-        token = chunk.strip()
-        if token:
-            tokens.append(token)
+    chunks: List[str] = [raw]
+    for delimiter in delimiters:
+        next_chunks: List[str] = []
+        for chunk in chunks:
+            next_chunks.extend(chunk.split(delimiter))
+        chunks = next_chunks
+    tokens = [chunk.strip() for chunk in chunks if chunk.strip()]
     if not tokens:
         return ("NA",)
     return tuple(sorted(set(tokens)))
@@ -393,7 +401,7 @@ def build_crispr_pairings(
         row = crispr_meta.iloc[int(treated_idx)]
         treated_cell_id = normalize_scalar(row[id_col])
         target_raw = normalize_scalar(row["clean_target_mapped"])
-        target_tokens = tokenize_target(target_raw)
+        target_tokens = tokenize_target(target_raw, delimiters=(";",))
         specificity_tier = normalize_scalar(row["specificity_tier"])
         time_value = float("nan")
         dose_value = float("nan")
@@ -499,7 +507,9 @@ def build_drug_pairings(
         row = drug_meta.iloc[int(treated_idx)]
         treated_cell_id = normalize_scalar(row[id_col])
         target_raw = normalize_scalar(row["clean_target_mapped"])
-        target_tokens = tokenize_target(target_raw)
+        # OSMOSIS scPerturb drug sources use "_" for multi-target chemicals,
+        # while preserved snapshots normalize tokens with ";".
+        target_tokens = tokenize_target(target_raw, delimiters=("_", ";"))
         specificity_tier = normalize_scalar(row["specificity_tier"])
         time_value = to_float_or_nan(row["time"])
         dose_value = to_float_or_nan(row["dose_value"])

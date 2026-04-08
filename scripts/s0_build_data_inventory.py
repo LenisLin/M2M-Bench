@@ -23,6 +23,13 @@
 #   - Missing required files/columns -> exit non-zero
 # Last Updated: 2026-03-03
 
+# Pipeline Status:
+#   - active canonical pipeline
+# Manuscript Role:
+#   - upstream inventory only; not a primary Figure 2/3 evidence surface
+# Architecture:
+#   - see scripts/ARCHITECTURE.md for canonical vs support vs historical script families
+
 """
 Inputs:
 - task1 snapshot files:
