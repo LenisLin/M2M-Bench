@@ -38,20 +38,20 @@ later-stage work 重新引入，而不是恢复旧入口脚本。
 
 ## 2. Directory Structure
 
-* `data/task1_snapshot_v1/`：只读；Task1 输入快照
-* `data/task2_snapshot_v1/`：只读；当前 legacy/interim scPerturb-K562 Task2 证据
-* `data/task2_snapshot_v2/`：corrected multisource Task2 successor snapshot root（当前已冻结并物化）
+* `/mnt/NAS_21T/ProjectData/M2M/snapshots/task1_snapshot_v1/`：只读；Task1 输入快照
+* `/mnt/NAS_21T/ProjectData/M2M/snapshots/task2_snapshot_v1/`：只读；当前 legacy/interim scPerturb-K562 Task2 证据
+* `/mnt/NAS_21T/ProjectData/M2M/snapshots/task2_snapshot_v2/`：corrected multisource Task2 successor snapshot root（当前已冻结并物化）
 * `src/m2mbench/`：复用库代码（metrics、chance correction、io schema、assertions）
 * `scripts/`：仅入口脚本；禁止复制大段逻辑
-* `runs/<run_id>/<stage>/`：项目内的本地兼容路径；当前允许通过 symlink 解析到 NAS-backed active/archive storage
-* `runs/_registry/`：运行登记
+* `runs/<run_id>/<stage>/`：stage contract notation；authoritative materializations resolve under `/mnt/NAS_21T/ProjectData/M2M/runs/...`
+* `/mnt/NAS_21T/ProjectData/M2M/runs/_registry/`：运行登记
 * `docs/`：contracts、pipeline、governance、story 等文档
 
 ---
 
 ## 2.1 Storage Backing
 
-**原则**：authoritative benchmark outputs 可以迁移出本地磁盘，但本地项目路径兼容性必须保持。
+**原则**：authoritative benchmark outputs 可以迁移出本地磁盘；脚本 contract 与 evidence discovery 必须优先以 NAS-backed authoritative roots 为准。
 
 * active authoritative results:
   * `/mnt/NAS_21T/ProjectData/M2M/runs`
@@ -59,11 +59,18 @@ later-stage work 重新引入，而不是恢复旧入口脚本。
   * `/mnt/NAS_21T/ProjectData/M2M/archive/runs`
 * archived reports:
   * `/mnt/NAS_21T/ProjectData/M2M/archive/reports`
-* local compatibility:
-  * `runs/` 当前保持为本地目录
-  * `runs/<run_id>` 按 run-id 提供 symlink，可分别指向 active 或 archive namespace
-  * `reports` 当前可作为指向 NAS archive 的 symlink
-* root-level `runs` symlink 不是当前运行策略；若未来要统一 namespace，必须作为单独项目审批，并先保证现有本地 `runs/<run_id>` 兼容路径不被破坏
+* canonical manuscript analysis:
+  * `/mnt/NAS_21T/ProjectData/M2M/runs/manuscript_active/analysis`
+* active manuscript support:
+  * `/mnt/NAS_21T/ProjectData/M2M/runs/manuscript_support`
+* historical manuscript archive:
+  * `/mnt/NAS_21T/ProjectData/M2M/archive/manuscript_history`
+* local checkout:
+  * repo-root `runs/`、`data/` snapshots、`tmp/`、`tmp_r_lib/` 不应保留结果或 staging 内容
+  * 若需要 review/export staging，必须写到 NAS-backed staging root
+* plotting/runtime rule:
+  * R 渲染必须运行在 conda 环境 `Spatial`
+  * 不允许通过 repo-local 临时库或缓存重定向来补齐 R 依赖
 
 参见：`docs/governance/local_storage_policy.md`
 
@@ -80,7 +87,7 @@ later-stage work 重新引入，而不是恢复旧入口脚本。
    * `run_manifest.json`
    * `audit_assertions.json`
    * `manifest.json`
-5. 所有输出只能写入 `runs/<run_id>/<stage>/`
+5. 所有输出只能写入该 run 的 stage directory；文档中通常记为 `runs/<run_id>/<stage>/`，但当前 authoritative materializations may resolve to NAS-backed paths via configuration
 6. 多线程只用于计算加速，不得改变 seed、排序、subsample 或分母口径
 
 ---
@@ -99,11 +106,11 @@ later-stage work 重新引入，而不是恢复旧入口脚本。
 
 **原则**：脚本内部不得自动删除 runs；由显式 cleanup 脚本执行。
 
-* registry：`runs/_registry/story_runs.csv`
+* registry：配置的 run root 下的 `_registry/story_runs.csv`
 * 字段：`run_id, stage, status, created_at, notes`
 * legacy/interim Task2 runs 必须保留并可标记为 `superseded`
 * corrected successor runs 另行登记，不覆盖 legacy 历史记录
-* 若 authoritative runs 已迁移到 NAS，只要 `runs/<run_id>` 本地兼容路径仍成立，就视为 preservation contract 满足
+* 若 authoritative runs 已迁移到 NAS，只要 audited run roots 在 authoritative storage 中可发现并与 manifests 一致，就视为 preservation contract 满足
 
 ---
 

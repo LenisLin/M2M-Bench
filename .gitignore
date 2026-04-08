@@ -9,6 +9,7 @@ outputs/
 /runs/
 /reports/
 /reports
+/.worktrees/
 
 # caches
 __pycache__/
