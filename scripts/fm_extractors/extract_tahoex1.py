@@ -57,9 +57,10 @@ import shlex
 import subprocess
 import sys
 import tempfile
+from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -193,7 +194,7 @@ def is_oom_text(text: str) -> bool:
     )
 
 
-def pick_tahoex1_cfg(config: Mapping[str, object]) -> Tuple[Mapping[str, object], str]:
+def pick_tahoex1_cfg(config: Mapping[str, object]) -> tuple[Mapping[str, object], str]:
     fm_cfg_root = config.get("fm_extractors", {})
     if not isinstance(fm_cfg_root, Mapping):
         return {}, "missing"
@@ -218,32 +219,47 @@ def resolve_tahoex1_assets(
     cfg: Mapping[str, object],
     args: argparse.Namespace,
     model_size: str,
-) -> Tuple[Path, Path, Path, Path, Dict[str, str]]:
-    sources: Dict[str, str] = {}
+) -> tuple[Path, Path, Path, Path, dict[str, str]]:
+    sources: dict[str, str] = {}
     root = model_dir.resolve()
 
-    predict_candidates: List[Tuple[Path, str]] = []
+    predict_candidates: list[tuple[Path, str]] = []
     if "predict_script" in cfg and cfg["predict_script"] is not None:
         predict_candidates.append(
             (resolve_config_path(project_root, str(cfg["predict_script"])), "config.predict_script")
         )
     predict_candidates.extend(
         [
-            (root / "scripts/inference/predict_embeddings.py", "model_dir/scripts/inference/predict_embeddings.py"),
+            (
+                root / "scripts/inference/predict_embeddings.py",
+                "model_dir/scripts/inference/predict_embeddings.py",
+            ),
             (root / "predict_embeddings.py", "model_dir/predict_embeddings.py"),
-            (root.parent / "tahoe-x1/scripts/inference/predict_embeddings.py", "model_dir_parent/tahoe-x1/scripts/inference/predict_embeddings.py"),
-            (root.parent / "Tahoe-x1/scripts/inference/predict_embeddings.py", "model_dir_parent/Tahoe-x1/scripts/inference/predict_embeddings.py"),
+            (
+                root.parent / "tahoe-x1/scripts/inference/predict_embeddings.py",
+                "model_dir_parent/tahoe-x1/scripts/inference/predict_embeddings.py",
+            ),
+            (
+                root.parent / "Tahoe-x1/scripts/inference/predict_embeddings.py",
+                "model_dir_parent/Tahoe-x1/scripts/inference/predict_embeddings.py",
+            ),
         ]
     )
     for anc in [root] + list(root.parents)[:4]:
         predict_candidates.extend(
             [
-                (anc / "benchmark/tahoe-x1/scripts/inference/predict_embeddings.py", f"{anc}/benchmark/tahoe-x1/scripts/inference/predict_embeddings.py"),
-                (anc / "M2MBench/benchmark/tahoe-x1/scripts/inference/predict_embeddings.py", f"{anc}/M2MBench/benchmark/tahoe-x1/scripts/inference/predict_embeddings.py"),
+                (
+                    anc / "benchmark/tahoe-x1/scripts/inference/predict_embeddings.py",
+                    f"{anc}/benchmark/tahoe-x1/scripts/inference/predict_embeddings.py",
+                ),
+                (
+                    anc / "M2MBench/benchmark/tahoe-x1/scripts/inference/predict_embeddings.py",
+                    f"{anc}/M2MBench/benchmark/tahoe-x1/scripts/inference/predict_embeddings.py",
+                ),
             ]
         )
 
-    predict_script: Optional[Path] = None
+    predict_script: Path | None = None
     for p, source in predict_candidates:
         if p.is_file():
             predict_script = p.resolve()
@@ -254,25 +270,40 @@ def resolve_tahoex1_assets(
 
     code_root = predict_script.parent.parent.parent.resolve()
 
-    package_candidates: List[Tuple[Path, str]] = []
+    package_candidates: list[tuple[Path, str]] = []
     if "model_package_dir" in cfg and cfg["model_package_dir"] is not None:
         package_candidates.append(
-            (resolve_config_path(project_root, str(cfg["model_package_dir"])), "config.model_package_dir")
+            (
+                resolve_config_path(project_root, str(cfg["model_package_dir"])),
+                "config.model_package_dir",
+            )
         )
     package_candidates.extend(
         [
             (root, "model_dir"),
             (root / f"{model_size}-model", f"model_dir/{model_size}-model"),
             (root.parent / f"{model_size}-model", f"model_dir_parent/{model_size}-model"),
-            (root.parent / "Tahoe-x1" / f"{model_size}-model", f"model_dir_parent/Tahoe-x1/{model_size}-model"),
-            (root.parent / "tahoe-x1" / f"{model_size}-model", f"model_dir_parent/tahoe-x1/{model_size}-model"),
+            (
+                root.parent / "Tahoe-x1" / f"{model_size}-model",
+                f"model_dir_parent/Tahoe-x1/{model_size}-model",
+            ),
+            (
+                root.parent / "tahoe-x1" / f"{model_size}-model",
+                f"model_dir_parent/tahoe-x1/{model_size}-model",
+            ),
             (code_root / f"{model_size}-model", f"code_root/{model_size}-model"),
-            (code_root.parent / "Tahoe-x1" / f"{model_size}-model", f"code_root_parent/Tahoe-x1/{model_size}-model"),
-            (code_root.parent / "tahoe-x1" / f"{model_size}-model", f"code_root_parent/tahoe-x1/{model_size}-model"),
+            (
+                code_root.parent / "Tahoe-x1" / f"{model_size}-model",
+                f"code_root_parent/Tahoe-x1/{model_size}-model",
+            ),
+            (
+                code_root.parent / "tahoe-x1" / f"{model_size}-model",
+                f"code_root_parent/tahoe-x1/{model_size}-model",
+            ),
         ]
     )
 
-    model_package_dir: Optional[Path] = None
+    model_package_dir: Path | None = None
     for p, source in package_candidates:
         if has_tahoex1_package_files(p):
             model_package_dir = p.resolve()
@@ -283,7 +314,7 @@ def resolve_tahoex1_assets(
             "Cannot resolve Tahoe-x1 package dir with model_config.yml/collator_config.yml/vocab.json/best-model.pt"
         )
 
-    gene_map_candidates: List[Tuple[Path, str]] = []
+    gene_map_candidates: list[tuple[Path, str]] = []
     if args.gene_map_pkl is not None:
         gene_map_candidates.append((args.gene_map_pkl.resolve(), "cli(--gene-map-pkl)"))
     if "gene_map_pkl" in cfg and cfg["gene_map_pkl"] is not None:
@@ -301,7 +332,8 @@ def resolve_tahoex1_assets(
                 "code_root_parent/Geneformer/geneformer/gene_name_id_dict_gc104M.pkl",
             ),
             (
-                project_root.parent / "M2MBench/benchmark/Geneformer/geneformer/gene_name_id_dict_gc104M.pkl",
+                project_root.parent
+                / "M2MBench/benchmark/Geneformer/geneformer/gene_name_id_dict_gc104M.pkl",
                 "project_root_parent/M2MBench/benchmark/Geneformer/geneformer/gene_name_id_dict_gc104M.pkl",
             ),
         ]
@@ -320,7 +352,7 @@ def resolve_tahoex1_assets(
             ]
         )
 
-    gene_map_pkl: Optional[Path] = None
+    gene_map_pkl: Path | None = None
     for p, source in gene_map_candidates:
         if p.is_file():
             gene_map_pkl = p.resolve()
@@ -334,12 +366,12 @@ def resolve_tahoex1_assets(
     return code_root, predict_script, model_package_dir, gene_map_pkl, sources
 
 
-def load_symbol_to_ensembl(pkl_path: Path) -> Dict[str, str]:
+def load_symbol_to_ensembl(pkl_path: Path) -> dict[str, str]:
     with pkl_path.open("rb") as handle:
         obj = pickle.load(handle)
     if not isinstance(obj, dict):
         raise TypeError(f"Expected dict in {pkl_path}, got {type(obj)}")
-    output: Dict[str, str] = {}
+    output: dict[str, str] = {}
     for k, v in obj.items():
         if k is None or v is None:
             continue
@@ -353,10 +385,10 @@ def load_symbol_to_ensembl(pkl_path: Path) -> Dict[str, str]:
 def build_tahoex1_gene_mapper(
     shared_genes: Sequence[str],
     symbol2ens: Mapping[str, str],
-) -> Tuple[np.ndarray, List[str], List[str]]:
-    src_cols: List[int] = []
-    mapped_symbols: List[str] = []
-    mapped_ensembl: List[str] = []
+) -> tuple[np.ndarray, list[str], list[str]]:
+    src_cols: list[int] = []
+    mapped_symbols: list[str] = []
+    mapped_ensembl: list[str] = []
 
     for i, symbol in enumerate(shared_genes):
         sym = str(symbol)
@@ -463,7 +495,7 @@ def run_tahoex1_once(
     job_dir: Path,
     cfg_yaml: Path,
     batch_size: int,
-) -> Tuple[bool, str]:
+) -> tuple[bool, str]:
     container_cfg_yaml = build_container_job_path(cfg_yaml)
     shell_cmd = (
         "python -m pip install -e . --no-deps >/tmp/tahoex1_pip_install.log 2>&1"
@@ -522,7 +554,7 @@ def extract_tahoex1_aligned(
     output_h5ad: Path,
     expected_ids: Sequence[str],
     tx_model_name: str,
-) -> Tuple[np.ndarray, List[str], str]:
+) -> tuple[np.ndarray, list[str], str]:
     adata = read_h5ad(output_h5ad)
     keys = list(adata.obsm_keys())
 
@@ -535,7 +567,9 @@ def extract_tahoex1_aligned(
             chosen = candidates[0]
 
     if chosen is None:
-        raise KeyError(f"Cannot find Tahoe-x1 embedding key. expected={tx_model_name}, available={keys}")
+        raise KeyError(
+            f"Cannot find Tahoe-x1 embedding key. expected={tx_model_name}, available={keys}"
+        )
 
     emb = np.asarray(adata.obsm[chosen], dtype=np.float32)
     if emb.ndim != 2:
@@ -565,9 +599,9 @@ def run_tahoex1_segment_with_retry(
     initial_batch_size: int,
     tx_model_name: str,
     expected_ids: Sequence[str],
-) -> Tuple[np.ndarray, int, Optional[str], Optional[str]]:
+) -> tuple[np.ndarray, int, str | None, str | None]:
     batch_size = max(1, int(initial_batch_size))
-    last_err: Optional[str] = None
+    last_err: str | None = None
 
     while True:
         ok, msg = run_tahoex1_once(
@@ -623,7 +657,7 @@ def extract_side_embeddings_tahoex1(
     gene_id_key: str,
     default_cell_type: str,
     stage_dir: Path,
-) -> Tuple[Dict[str, np.ndarray], Sequence[str], int, Dict[str, int], List[str]]:
+) -> tuple[dict[str, np.ndarray], Sequence[str], int, dict[str, int], list[str]]:
     meta = pd.read_csv(meta_path)
     id_col = choose_side_id_column(meta, side)
     meta_ids = meta[id_col].map(normalize_scalar).astype(str)
@@ -632,7 +666,7 @@ def extract_side_embeddings_tahoex1(
         dup = meta_ids.loc[meta_ids.duplicated()].head(MAX_COUNTEREXAMPLES).tolist()
         raise ValueError(f"{side} metadata id column has duplicates, examples={dup}")
 
-    id_to_row: Dict[str, int] = {cell_id: int(i) for i, cell_id in enumerate(meta_ids.tolist())}
+    id_to_row: dict[str, int] = {cell_id: int(i) for i, cell_id in enumerate(meta_ids.tolist())}
 
     counts_t = torch.load(counts_path, map_location="cpu")
     if not torch.is_tensor(counts_t):
@@ -651,10 +685,10 @@ def extract_side_embeddings_tahoex1(
     ordered_rows = present_rows[order]
     ordered_ids = [present_ids[int(i)] for i in order.tolist()]
 
-    vectors_by_cell: Dict[str, np.ndarray] = {}
+    vectors_by_cell: dict[str, np.ndarray] = {}
     invalid_cells: set[str] = set(missing_ids)
-    emb_dim: Optional[int] = None
-    chunk_errors: List[str] = []
+    emb_dim: int | None = None
+    chunk_errors: list[str] = []
 
     stats = {
         "n_required_cells": int(len(required_unique)),
@@ -673,7 +707,7 @@ def extract_side_embeddings_tahoex1(
         chunk_ids = ordered_ids[start:end]
         stats["n_chunks_total"] += 1
 
-        queue: List[np.ndarray] = [np.arange(len(chunk_rows), dtype=np.int64)]
+        queue: list[np.ndarray] = [np.arange(len(chunk_rows), dtype=np.int64)]
         segment_i = 0
         chunk_success = True
 
@@ -683,7 +717,13 @@ def extract_side_embeddings_tahoex1(
             seg_rows = chunk_rows[seg_local]
 
             seg_tensor = torch.as_tensor(seg_rows, dtype=torch.long)
-            seg_counts = counts_t.index_select(0, seg_tensor).detach().cpu().numpy().astype(np.float32, copy=False)
+            seg_counts = (
+                counts_t.index_select(0, seg_tensor)
+                .detach()
+                .cpu()
+                .numpy()
+                .astype(np.float32, copy=False)
+            )
 
             try:
                 seg_mapped = seg_counts[:, src_cols]
@@ -733,7 +773,9 @@ def extract_side_embeddings_tahoex1(
             kept_ids = [seg_ids[int(i)] for i in keep_idx.tolist()]
             kept_counts = seg_mapped[keep_idx]
 
-            with tempfile.TemporaryDirectory(prefix=f"tahoex1_{side}_{start}_{end}_seg{segment_i:04d}_", dir=str(stage_dir)) as tmp:
+            with tempfile.TemporaryDirectory(
+                prefix=f"tahoex1_{side}_{start}_{end}_seg{segment_i:04d}_", dir=str(stage_dir)
+            ) as tmp:
                 tmp_dir = Path(tmp)
                 input_h5ad = tmp_dir / f"chunk_{side}_{start}_{end}_seg{segment_i:04d}.h5ad"
                 output_h5ad = tmp_dir / f"chunk_{side}_{start}_{end}_seg{segment_i:04d}_tx1.h5ad"
@@ -741,8 +783,6 @@ def extract_side_embeddings_tahoex1(
                 segment_i += 1
                 container_input_h5ad = build_container_job_path(input_h5ad)
                 container_output_h5ad = build_container_job_path(output_h5ad)
-                container_cfg_yaml = build_container_job_path(cfg_yaml)
-
                 try:
                     write_tahoex1_input_h5ad(
                         counts_dense=kept_counts,
@@ -785,7 +825,9 @@ def extract_side_embeddings_tahoex1(
                     )
 
                     if emb_matrix.size == 0:
-                        raise RuntimeError(f"Tahoe-x1 segment failed after retry (batch_size_final={used_bs}): {err}")
+                        raise RuntimeError(
+                            f"Tahoe-x1 segment failed after retry (batch_size_final={used_bs}): {err}"
+                        )
 
                     if emb_dim is None:
                         emb_dim = int(emb_matrix.shape[1])
@@ -794,7 +836,7 @@ def extract_side_embeddings_tahoex1(
                             f"Embedding dim mismatch: got={emb_matrix.shape[1]} expected={emb_dim}"
                         )
 
-                    for cid, vec in zip(kept_ids, emb_matrix):
+                    for cid, vec in zip(kept_ids, emb_matrix, strict=True):
                         if not np.isfinite(vec).all():
                             invalid_cells.add(cid)
                             continue
@@ -830,7 +872,9 @@ def extract_side_embeddings_tahoex1(
     del counts_t
 
     if emb_dim is None:
-        raise RuntimeError(f"{side} embedding failed for all chunks; cannot determine embedding dimension.")
+        raise RuntimeError(
+            f"{side} embedding failed for all chunks; cannot determine embedding dimension."
+        )
 
     return vectors_by_cell, sorted(invalid_cells), emb_dim, stats, chunk_errors
 
@@ -868,10 +912,10 @@ def main() -> int:
     stage_dir.mkdir(parents=True, exist_ok=True)
     started_at = utc_now_iso()
 
-    assertions: List[Dict[str, object]] = []
-    input_paths: List[Path] = []
-    snapshot_outputs: List[Path] = []
-    stage_outputs: List[Path] = []
+    assertions: list[dict[str, object]] = []
+    input_paths: list[Path] = []
+    snapshot_outputs: list[Path] = []
+    stage_outputs: list[Path] = []
 
     init_global_seed(GLOBAL_SEED)
     assertions.append(
@@ -885,7 +929,7 @@ def main() -> int:
 
     fm_cfg, fm_cfg_source = pick_tahoex1_cfg(config)
 
-    model_dir: Optional[Path]
+    model_dir: Path | None
     if args.model_dir is not None:
         model_dir = args.model_dir.resolve()
         model_dir_source = "cli(--model-dir)"
@@ -915,54 +959,92 @@ def main() -> int:
         print("[ERROR] Missing valid Tahoe-x1 model directory.", file=sys.stderr)
         return 5
 
-    model_size = str(args.model_size) if args.model_size is not None else str(fm_cfg.get("model_size", "70m"))
+    model_size = (
+        str(args.model_size)
+        if args.model_size is not None
+        else str(fm_cfg.get("model_size", "70m"))
+    )
     if model_size not in {"70m", "1b", "3b"}:
         print(f"[ERROR] Unsupported --model-size={model_size}", file=sys.stderr)
         return 6
 
-    python_bin = str(args.python_bin) if args.python_bin is not None else str(fm_cfg.get("python_bin", "python"))
-    batch_size = int(args.batch_size) if args.batch_size is not None else int(fm_cfg.get("batch_size", 8))
+    python_bin = (
+        str(args.python_bin)
+        if args.python_bin is not None
+        else str(fm_cfg.get("python_bin", "python"))
+    )
+    batch_size = (
+        int(args.batch_size) if args.batch_size is not None else int(fm_cfg.get("batch_size", 8))
+    )
     cell_chunk_size = (
-        int(args.cell_chunk_size) if args.cell_chunk_size is not None else int(fm_cfg.get("cell_chunk_size", 2048))
+        int(args.cell_chunk_size)
+        if args.cell_chunk_size is not None
+        else int(fm_cfg.get("cell_chunk_size", 2048))
     )
     seq_len_dataset = (
-        int(args.seq_len_dataset) if args.seq_len_dataset is not None else int(fm_cfg.get("seq_len_dataset", 2048))
+        int(args.seq_len_dataset)
+        if args.seq_len_dataset is not None
+        else int(fm_cfg.get("seq_len_dataset", 2048))
     )
-    num_workers = int(args.num_workers) if args.num_workers is not None else int(fm_cfg.get("num_workers", 8))
+    num_workers = (
+        int(args.num_workers) if args.num_workers is not None else int(fm_cfg.get("num_workers", 8))
+    )
     prefetch_factor = (
-        int(args.prefetch_factor) if args.prefetch_factor is not None else int(fm_cfg.get("prefetch_factor", 48))
+        int(args.prefetch_factor)
+        if args.prefetch_factor is not None
+        else int(fm_cfg.get("prefetch_factor", 48))
     )
     tx_model_name = (
         str(args.tx_model_name)
         if args.tx_model_name is not None
         else str(fm_cfg.get("tx_model_name", f"Tx1-{model_size}"))
     )
-    cell_type_key = str(args.cell_type_key) if args.cell_type_key is not None else str(fm_cfg.get("cell_type_key", "cell_type"))
-    gene_id_key = str(args.gene_id_key) if args.gene_id_key is not None else str(fm_cfg.get("gene_id_key", "ensembl_id"))
+    cell_type_key = (
+        str(args.cell_type_key)
+        if args.cell_type_key is not None
+        else str(fm_cfg.get("cell_type_key", "cell_type"))
+    )
+    gene_id_key = (
+        str(args.gene_id_key)
+        if args.gene_id_key is not None
+        else str(fm_cfg.get("gene_id_key", "ensembl_id"))
+    )
     default_cell_type = (
         str(args.default_cell_type)
         if args.default_cell_type is not None
         else str(fm_cfg.get("default_cell_type", "unknown"))
     )
-    docker_image = str(args.docker_image) if args.docker_image is not None else str(fm_cfg.get("docker_image", DEFAULT_DOCKER_IMAGE))
+    docker_image = (
+        str(args.docker_image)
+        if args.docker_image is not None
+        else str(fm_cfg.get("docker_image", DEFAULT_DOCKER_IMAGE))
+    )
     docker_shm_size = (
-        str(args.docker_shm_size) if args.docker_shm_size is not None else str(fm_cfg.get("docker_shm_size", DEFAULT_DOCKER_SHM_SIZE))
+        str(args.docker_shm_size)
+        if args.docker_shm_size is not None
+        else str(fm_cfg.get("docker_shm_size", DEFAULT_DOCKER_SHM_SIZE))
     )
 
     try:
-        model_root, predict_script, model_package_dir, gene_map_pkl, asset_sources = resolve_tahoex1_assets(
-            project_root=project_root,
-            model_dir=model_dir,
-            cfg=fm_cfg,
-            args=args,
-            model_size=model_size,
+        model_root, predict_script, model_package_dir, gene_map_pkl, asset_sources = (
+            resolve_tahoex1_assets(
+                project_root=project_root,
+                model_dir=model_dir,
+                cfg=fm_cfg,
+                args=args,
+                model_size=model_size,
+            )
         )
     except Exception as exc:  # noqa: BLE001
         assertions.append(
             {
                 "name": "tahoex1_assets_resolved",
                 "pass": False,
-                "details": {"error": str(exc), "model_dir": str(model_dir), "model_size": model_size},
+                "details": {
+                    "error": str(exc),
+                    "model_dir": str(model_dir),
+                    "model_size": model_size,
+                },
                 "counterexamples": [{"error": str(exc)}],
             }
         )
@@ -1030,7 +1112,9 @@ def main() -> int:
                 "name": "task2_snapshot_inputs_present",
                 "pass": False,
                 "details": {"rules": ["All required inputs must exist."]},
-                "counterexamples": [{"missing_input": str(p)} for p in missing_inputs[:MAX_COUNTEREXAMPLES]],
+                "counterexamples": [
+                    {"missing_input": str(p)} for p in missing_inputs[:MAX_COUNTEREXAMPLES]
+                ],
             }
         )
         write_json(stage_dir / "audit_assertions.json", {"assertions": assertions})
@@ -1097,7 +1181,9 @@ def main() -> int:
         ["treated_cell_id", "control_cell_id", "control_rank", "n_controls_used", "dataset_side"],
         "pair_list.parquet",
     )
-    ensure_required_columns(delta_meta, ["row_id", "treated_cell_id", "n_controls_used"], "delta_meta.csv")
+    ensure_required_columns(
+        delta_meta, ["row_id", "treated_cell_id", "n_controls_used"], "delta_meta.csv"
+    )
 
     if "dataset_side" not in delta_meta.columns:
         if "perturbation_class" not in delta_meta.columns:
@@ -1113,12 +1199,18 @@ def main() -> int:
     pair_df["dataset_side"] = pair_df["dataset_side"].astype(str).str.strip().str.upper()
     pair_df["treated_cell_id"] = pair_df["treated_cell_id"].map(normalize_scalar)
     pair_df["control_cell_id"] = pair_df["control_cell_id"].map(normalize_scalar)
-    pair_df["control_rank"] = pd.to_numeric(pair_df["control_rank"], errors="raise").astype(np.int64)
-    pair_df["n_controls_used"] = pd.to_numeric(pair_df["n_controls_used"], errors="raise").astype(np.int64)
+    pair_df["control_rank"] = pd.to_numeric(pair_df["control_rank"], errors="raise").astype(
+        np.int64
+    )
+    pair_df["n_controls_used"] = pd.to_numeric(pair_df["n_controls_used"], errors="raise").astype(
+        np.int64
+    )
 
     delta_meta["row_id"] = pd.to_numeric(delta_meta["row_id"], errors="raise").astype(np.int64)
     delta_meta["treated_cell_id"] = delta_meta["treated_cell_id"].map(normalize_scalar)
-    delta_meta["n_controls_used"] = pd.to_numeric(delta_meta["n_controls_used"], errors="raise").astype(np.int64)
+    delta_meta["n_controls_used"] = pd.to_numeric(
+        delta_meta["n_controls_used"], errors="raise"
+    ).astype(np.int64)
     delta_meta["dataset_side"] = delta_meta["dataset_side"].astype(str).str.strip().str.upper()
     delta_meta = delta_meta.sort_values("row_id", kind="mergesort").reset_index(drop=True)
 
@@ -1131,7 +1223,9 @@ def main() -> int:
             "name": "delta_meta_row_id_contiguous",
             "pass": bool(row_alignment_input_ok),
             "details": {
-                "rules": ["delta_meta.row_id must be exactly 0..N-1 for strict row alignment contract"],
+                "rules": [
+                    "delta_meta.row_id must be exactly 0..N-1 for strict row alignment contract"
+                ],
                 "n_rows": n_rows,
             },
             "counterexamples": []
@@ -1144,11 +1238,15 @@ def main() -> int:
         print("[ERROR] delta_meta.row_id is not contiguous 0..N-1.", file=sys.stderr)
         return 10
 
-    pair_sorted = pair_df.sort_values(["dataset_side", "treated_cell_id", "control_rank"], kind="mergesort")
-    controls_by_key: Dict[Tuple[str, str], List[str]] = {}
-    pair_contract_violations: List[Dict[str, object]] = []
+    pair_sorted = pair_df.sort_values(
+        ["dataset_side", "treated_cell_id", "control_rank"], kind="mergesort"
+    )
+    controls_by_key: dict[tuple[str, str], list[str]] = {}
+    pair_contract_violations: list[dict[str, object]] = []
 
-    for (side, treated_cell_id), grp in pair_sorted.groupby(["dataset_side", "treated_cell_id"], sort=False):
+    for (side, treated_cell_id), grp in pair_sorted.groupby(
+        ["dataset_side", "treated_cell_id"], sort=False
+    ):
         controls = grp["control_cell_id"].astype(str).tolist()
         n_used_unique = grp["n_controls_used"].unique()
         if len(n_used_unique) != 1:
@@ -1198,7 +1296,7 @@ def main() -> int:
         print("[ERROR] pair_list grouping contract failed.", file=sys.stderr)
         return 11
 
-    required_by_side: Dict[str, set[str]] = {"CRISPR": set(), "DRUG": set()}
+    required_by_side: dict[str, set[str]] = {"CRISPR": set(), "DRUG": set()}
     missing_pair_keys = 0
     for row in delta_meta.itertuples(index=False):
         side = str(row.dataset_side)
@@ -1227,7 +1325,9 @@ def main() -> int:
 
     try:
         symbol2ens = load_symbol_to_ensembl(gene_map_pkl)
-        src_cols, mapped_gene_symbols, mapped_ensembl = build_tahoex1_gene_mapper(shared_genes, symbol2ens)
+        src_cols, mapped_gene_symbols, mapped_ensembl = build_tahoex1_gene_mapper(
+            shared_genes, symbol2ens
+        )
     except Exception as exc:  # noqa: BLE001
         assertions.append(
             {
@@ -1255,10 +1355,10 @@ def main() -> int:
         }
     )
 
-    side_vectors: Dict[str, Dict[str, np.ndarray]] = {}
-    side_stats: Dict[str, Dict[str, int]] = {}
-    side_chunk_errors: Dict[str, List[str]] = {}
-    emb_dim: Optional[int] = None
+    side_vectors: dict[str, dict[str, np.ndarray]] = {}
+    side_stats: dict[str, dict[str, int]] = {}
+    side_chunk_errors: dict[str, list[str]] = {}
+    emb_dim: int | None = None
 
     side_specs = [
         ("CRISPR", crispr_meta_path, crispr_counts_path),
@@ -1267,30 +1367,32 @@ def main() -> int:
 
     for side, meta_path, counts_path in side_specs:
         try:
-            vectors, _invalid_cells, side_dim, stats, chunk_errors = extract_side_embeddings_tahoex1(
-                side=side,
-                meta_path=meta_path,
-                counts_path=counts_path,
-                required_cell_ids=sorted(required_by_side.get(side, set())),
-                src_cols=src_cols,
-                mapped_gene_symbols=mapped_gene_symbols,
-                mapped_ensembl=mapped_ensembl,
-                python_bin=python_bin,
-                predict_script=predict_script,
-                model_root=model_root,
-                model_package_dir=model_package_dir,
-                docker_image=docker_image,
-                docker_shm_size=docker_shm_size,
-                tx_model_name=tx_model_name,
-                batch_size=batch_size,
-                seq_len_dataset=seq_len_dataset,
-                num_workers=num_workers,
-                prefetch_factor=prefetch_factor,
-                cell_chunk_size=cell_chunk_size,
-                cell_type_key=cell_type_key,
-                gene_id_key=gene_id_key,
-                default_cell_type=default_cell_type,
-                stage_dir=stage_dir,
+            vectors, _invalid_cells, side_dim, stats, chunk_errors = (
+                extract_side_embeddings_tahoex1(
+                    side=side,
+                    meta_path=meta_path,
+                    counts_path=counts_path,
+                    required_cell_ids=sorted(required_by_side.get(side, set())),
+                    src_cols=src_cols,
+                    mapped_gene_symbols=mapped_gene_symbols,
+                    mapped_ensembl=mapped_ensembl,
+                    python_bin=python_bin,
+                    predict_script=predict_script,
+                    model_root=model_root,
+                    model_package_dir=model_package_dir,
+                    docker_image=docker_image,
+                    docker_shm_size=docker_shm_size,
+                    tx_model_name=tx_model_name,
+                    batch_size=batch_size,
+                    seq_len_dataset=seq_len_dataset,
+                    num_workers=num_workers,
+                    prefetch_factor=prefetch_factor,
+                    cell_chunk_size=cell_chunk_size,
+                    cell_type_key=cell_type_key,
+                    gene_id_key=gene_id_key,
+                    default_cell_type=default_cell_type,
+                    stage_dir=stage_dir,
+                )
             )
         except Exception as exc:  # noqa: BLE001
             assertions.append(
@@ -1367,7 +1469,7 @@ def main() -> int:
             invalid_reason[row_id] = "treated_embedding_missing_or_invalid"
             continue
 
-        ctrl_vecs: List[np.ndarray] = []
+        ctrl_vecs: list[np.ndarray] = []
         missing_ctrl = False
         for control_id in controls:
             cvec = side_vectors.get(side, {}).get(control_id)
@@ -1388,8 +1490,12 @@ def main() -> int:
         fm_delta[row_id] = delta_vec.astype(np.float32, copy=False)
         valid_mask[row_id] = True
 
-    valid_finite_ok = bool(np.isfinite(fm_delta[valid_mask]).all()) if bool(valid_mask.any()) else True
-    invalid_nan_ok = bool(np.isnan(fm_delta[~valid_mask]).all()) if bool((~valid_mask).any()) else True
+    valid_finite_ok = (
+        bool(np.isfinite(fm_delta[valid_mask]).all()) if bool(valid_mask.any()) else True
+    )
+    invalid_nan_ok = (
+        bool(np.isnan(fm_delta[~valid_mask]).all()) if bool((~valid_mask).any()) else True
+    )
 
     assertions.append(
         {
@@ -1576,7 +1682,10 @@ def main() -> int:
             "embedding_dim": int(emb_dim),
             "n_valid": int(valid_mask.sum()),
             "n_invalid": int((~valid_mask).sum()),
-            "invalid_reason_top": pd.Series(invalid_reason[invalid_reason != ""]).value_counts().head(10).to_dict(),
+            "invalid_reason_top": pd.Series(invalid_reason[invalid_reason != ""])
+            .value_counts()
+            .head(10)
+            .to_dict(),
             "side_stats": side_stats,
             "n_mapped_genes": int(len(src_cols)),
         },
@@ -1585,7 +1694,7 @@ def main() -> int:
     write_json(run_manifest_path, run_manifest)
     write_json(audit_assertions_path, {"assertions": assertions})
 
-    manifest_entries: List[Dict[str, object]] = []
+    manifest_entries: list[dict[str, object]] = []
     for file_path in sorted(stage_dir.iterdir()):
         if file_path.is_file() and file_path.name != "manifest.json":
             manifest_entries.append(
@@ -1597,7 +1706,9 @@ def main() -> int:
             )
     write_json(manifest_path, {"stage": STAGE, "files": manifest_entries})
 
-    output_routing_stage_pass = all(path.resolve().is_relative_to(stage_dir.resolve()) for path in stage_outputs)
+    output_routing_stage_pass = all(
+        path.resolve().is_relative_to(stage_dir.resolve()) for path in stage_outputs
+    )
     if not output_routing_stage_pass:
         print("[ERROR] Stage output routing assertion failed.", file=sys.stderr)
         return 15

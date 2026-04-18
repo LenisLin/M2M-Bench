@@ -56,10 +56,11 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from collections.abc import Mapping, Sequence
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -88,7 +89,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--device", type=str, default=None, help="Override device: cpu or cuda")
     parser.add_argument("--batch-size", type=int, default=None)
     parser.add_argument("--cell-chunk-size", type=int, default=None)
-    parser.add_argument("--bin-num", type=int, default=None, help="Discretization bin_num (legacy default=5)")
+    parser.add_argument(
+        "--bin-num", type=int, default=None, help="Discretization bin_num (legacy default=5)"
+    )
     parser.add_argument(
         "--gene-num",
         type=int,
@@ -183,7 +186,7 @@ def choose_side_id_column(meta: pd.DataFrame, side: str) -> str:
     raise ValueError(f"Unable to locate cell-id column for side={side}")
 
 
-def choose_scbert_performer(model_dir: Path) -> Tuple[Any, str]:
+def choose_scbert_performer(model_dir: Path) -> tuple[Any, str]:
     model_dir_str = str(model_dir.resolve())
     if model_dir_str not in sys.path:
         sys.path.insert(0, model_dir_str)
@@ -214,12 +217,14 @@ def resolve_scbert_assets(
     project_root: Path,
     model_dir: Path,
     cfg: Mapping[str, object],
-) -> Tuple[Path, Path, Path, Path, Dict[str, str]]:
-    sources: Dict[str, str] = {}
+) -> tuple[Path, Path, Path, Path, dict[str, str]]:
+    sources: dict[str, str] = {}
 
     performer_dir = (model_dir / "performer_pytorch").resolve()
     if not performer_dir.is_dir():
-        raise RuntimeError(f"Missing scBERT performer_pytorch directory under model_dir: {performer_dir}")
+        raise RuntimeError(
+            f"Missing scBERT performer_pytorch directory under model_dir: {performer_dir}"
+        )
     sources["performer_dir"] = "model_dir/performer_pytorch"
 
     if "checkpoint_file" in cfg and cfg["checkpoint_file"] is not None:
@@ -250,7 +255,7 @@ def resolve_scbert_assets(
     return performer_dir, checkpoint_path, gene2vec_path, ref_h5ad_path, sources
 
 
-def load_reference_genes(ref_h5ad_path: Path) -> List[str]:
+def load_reference_genes(ref_h5ad_path: Path) -> list[str]:
     try:
         import scanpy as sc  # type: ignore
 
@@ -268,10 +273,12 @@ def load_reference_genes(ref_h5ad_path: Path) -> List[str]:
             ) from exc
 
 
-def build_gene_mapper(shared_genes: Sequence[str], ref_genes: Sequence[str]) -> Tuple[np.ndarray, np.ndarray]:
-    ref_index: Dict[str, int] = {str(g): i for i, g in enumerate(ref_genes)}
-    src_cols: List[int] = []
-    ref_cols: List[int] = []
+def build_gene_mapper(
+    shared_genes: Sequence[str], ref_genes: Sequence[str]
+) -> tuple[np.ndarray, np.ndarray]:
+    ref_index: dict[str, int] = {str(g): i for i, g in enumerate(ref_genes)}
+    src_cols: list[int] = []
+    ref_cols: list[int] = []
     for j, gene in enumerate(shared_genes):
         idx = ref_index.get(str(gene))
         if idx is None:
@@ -281,7 +288,9 @@ def build_gene_mapper(shared_genes: Sequence[str], ref_genes: Sequence[str]) -> 
     src_arr = np.asarray(src_cols, dtype=np.int64)
     ref_arr = np.asarray(ref_cols, dtype=np.int64)
     if src_arr.size == 0:
-        raise RuntimeError("No overlapping genes between shared_var_names and scBERT reference gene order.")
+        raise RuntimeError(
+            "No overlapping genes between shared_var_names and scBERT reference gene order."
+        )
     return src_arr, ref_arr
 
 
@@ -334,7 +343,7 @@ def load_scbert_pretrained(
     class_count: int,
     g2v_position_emb: bool,
     stage_dir: Path,
-) -> Tuple[Any, Dict[str, int]]:
+) -> tuple[Any, dict[str, int]]:
     runtime_root = Path(tempfile.mkdtemp(prefix="scbert_runtime_", dir=str(stage_dir)))
     try:
         runtime_performer = runtime_root / "performer_pytorch"
@@ -360,11 +369,15 @@ def load_scbert_pretrained(
             )
 
         ckpt = torch.load(checkpoint_path, map_location="cpu")
-        state = ckpt["model_state_dict"] if isinstance(ckpt, dict) and "model_state_dict" in ckpt else ckpt
+        state = (
+            ckpt["model_state_dict"]
+            if isinstance(ckpt, dict) and "model_state_dict" in ckpt
+            else ckpt
+        )
         if not isinstance(state, Mapping):
             raise RuntimeError("scBERT checkpoint format is invalid: state_dict is not a mapping")
 
-        cleaned_state: Dict[str, torch.Tensor] = {}
+        cleaned_state: dict[str, torch.Tensor] = {}
         for k, v in state.items():
             nk = str(k).replace("module.", "")
             cleaned_state[nk] = v
@@ -399,7 +412,7 @@ def run_scbert_embedding(
     if n == 0:
         return np.empty((0, 0), dtype=np.float32)
 
-    emb_list: List[np.ndarray] = []
+    emb_list: list[np.ndarray] = []
     bs = max(1, int(batch_size))
 
     for start in range(0, n, bs):
@@ -421,7 +434,9 @@ def run_scbert_embedding(
 
         hidden = model(seq_t)
         if hidden.ndim != 3:
-            raise RuntimeError(f"scBERT forward must return 3D hidden states, got shape={tuple(hidden.shape)}")
+            raise RuntimeError(
+                f"scBERT forward must return 3D hidden states, got shape={tuple(hidden.shape)}"
+            )
 
         cell_emb = hidden[:, -1, :].detach().cpu().numpy().astype(np.float32, copy=False)
         emb_list.append(cell_emb)
@@ -443,9 +458,9 @@ def embed_chunk_with_retry(
     bin_num: int,
     initial_batch_size: int,
     device: torch.device,
-) -> Tuple[Optional[np.ndarray], int, Optional[str]]:
+) -> tuple[np.ndarray | None, int, str | None]:
     batch_size = max(1, int(initial_batch_size))
-    last_error: Optional[str] = None
+    last_error: str | None = None
 
     while True:
         try:
@@ -483,7 +498,7 @@ def extract_side_embeddings_scbert(
     batch_size: int,
     cell_chunk_size: int,
     device: torch.device,
-) -> Tuple[Dict[str, np.ndarray], Sequence[str], int, Dict[str, int], List[str]]:
+) -> tuple[dict[str, np.ndarray], Sequence[str], int, dict[str, int], list[str]]:
     meta = pd.read_csv(meta_path)
     id_col = choose_side_id_column(meta, side)
     meta_ids = meta[id_col].map(normalize_scalar).astype(str)
@@ -492,7 +507,7 @@ def extract_side_embeddings_scbert(
         dup = meta_ids.loc[meta_ids.duplicated()].head(MAX_COUNTEREXAMPLES).tolist()
         raise ValueError(f"{side} metadata id column has duplicates, examples={dup}")
 
-    id_to_row: Dict[str, int] = {cell_id: int(i) for i, cell_id in enumerate(meta_ids.tolist())}
+    id_to_row: dict[str, int] = {cell_id: int(i) for i, cell_id in enumerate(meta_ids.tolist())}
 
     counts_t = torch.load(counts_path, map_location="cpu")
     if not torch.is_tensor(counts_t):
@@ -511,10 +526,10 @@ def extract_side_embeddings_scbert(
     ordered_rows = present_rows[order]
     ordered_ids = [present_ids[int(i)] for i in order.tolist()]
 
-    vectors_by_cell: Dict[str, np.ndarray] = {}
+    vectors_by_cell: dict[str, np.ndarray] = {}
     invalid_cells: set[str] = set(missing_ids)
-    emb_dim: Optional[int] = None
-    chunk_errors: List[str] = []
+    emb_dim: int | None = None
+    chunk_errors: list[str] = []
 
     stats = {
         "n_required_cells": int(len(required_unique)),
@@ -573,7 +588,7 @@ def extract_side_embeddings_scbert(
             continue
 
         stats["n_chunks_succeeded"] += 1
-        for cid, vec in zip(chunk_ids, matrix):
+        for cid, vec in zip(chunk_ids, matrix, strict=True):
             if not np.isfinite(vec).all():
                 invalid_cells.add(str(cid))
                 continue
@@ -625,10 +640,10 @@ def main() -> int:
     stage_dir.mkdir(parents=True, exist_ok=True)
     started_at = utc_now_iso()
 
-    assertions: List[Dict[str, object]] = []
-    input_paths: List[Path] = []
-    snapshot_outputs: List[Path] = []
-    stage_outputs: List[Path] = []
+    assertions: list[dict[str, object]] = []
+    input_paths: list[Path] = []
+    snapshot_outputs: list[Path] = []
+    stage_outputs: list[Path] = []
 
     init_global_seed(GLOBAL_SEED)
     assertions.append(
@@ -648,7 +663,7 @@ def main() -> int:
     else:
         fm_cfg = {}
 
-    model_dir: Optional[Path]
+    model_dir: Path | None
     if args.model_dir is not None:
         model_dir = args.model_dir.resolve()
         model_dir_source = "cli(--model-dir)"
@@ -679,10 +694,12 @@ def main() -> int:
         return 5
 
     try:
-        performer_dir, checkpoint_path, gene2vec_path, ref_h5ad_path, asset_sources = resolve_scbert_assets(
-            project_root=project_root,
-            model_dir=model_dir,
-            cfg=fm_cfg,
+        performer_dir, checkpoint_path, gene2vec_path, ref_h5ad_path, asset_sources = (
+            resolve_scbert_assets(
+                project_root=project_root,
+                model_dir=model_dir,
+                cfg=fm_cfg,
+            )
         )
     except Exception as exc:  # noqa: BLE001
         assertions.append(
@@ -701,7 +718,7 @@ def main() -> int:
     batch_size_cfg = int(fm_cfg.get("batch_size", 24))
     cell_chunk_cfg = int(fm_cfg.get("cell_chunk_size", 4096))
     bin_num_cfg = int(fm_cfg.get("bin_num", 5))
-    gene_num_cfg = fm_cfg.get("gene_num", None)
+    gene_num_cfg = fm_cfg.get("gene_num")
     g2v_cfg = bool(fm_cfg.get("g2v_position_emb", True))
 
     device_str = args.device if args.device else device_cfg
@@ -710,7 +727,9 @@ def main() -> int:
     device = torch.device(device_str)
 
     batch_size = int(args.batch_size) if args.batch_size is not None else batch_size_cfg
-    cell_chunk_size = int(args.cell_chunk_size) if args.cell_chunk_size is not None else cell_chunk_cfg
+    cell_chunk_size = (
+        int(args.cell_chunk_size) if args.cell_chunk_size is not None else cell_chunk_cfg
+    )
     bin_num = int(args.bin_num) if args.bin_num is not None else bin_num_cfg
     g2v_position_emb = not bool(args.no_g2v_pos_embed) and bool(g2v_cfg)
 
@@ -767,7 +786,9 @@ def main() -> int:
                 "name": "task2_snapshot_inputs_present",
                 "pass": False,
                 "details": {"rules": ["All required inputs must exist."]},
-                "counterexamples": [{"missing_input": str(p)} for p in missing_inputs[:MAX_COUNTEREXAMPLES]],
+                "counterexamples": [
+                    {"missing_input": str(p)} for p in missing_inputs[:MAX_COUNTEREXAMPLES]
+                ],
             }
         )
         write_json(stage_dir / "audit_assertions.json", {"assertions": assertions})
@@ -834,7 +855,9 @@ def main() -> int:
         ["treated_cell_id", "control_cell_id", "control_rank", "n_controls_used", "dataset_side"],
         "pair_list.parquet",
     )
-    ensure_required_columns(delta_meta, ["row_id", "treated_cell_id", "n_controls_used"], "delta_meta.csv")
+    ensure_required_columns(
+        delta_meta, ["row_id", "treated_cell_id", "n_controls_used"], "delta_meta.csv"
+    )
 
     if "dataset_side" not in delta_meta.columns:
         if "perturbation_class" not in delta_meta.columns:
@@ -850,12 +873,18 @@ def main() -> int:
     pair_df["dataset_side"] = pair_df["dataset_side"].astype(str).str.strip().str.upper()
     pair_df["treated_cell_id"] = pair_df["treated_cell_id"].map(normalize_scalar)
     pair_df["control_cell_id"] = pair_df["control_cell_id"].map(normalize_scalar)
-    pair_df["control_rank"] = pd.to_numeric(pair_df["control_rank"], errors="raise").astype(np.int64)
-    pair_df["n_controls_used"] = pd.to_numeric(pair_df["n_controls_used"], errors="raise").astype(np.int64)
+    pair_df["control_rank"] = pd.to_numeric(pair_df["control_rank"], errors="raise").astype(
+        np.int64
+    )
+    pair_df["n_controls_used"] = pd.to_numeric(pair_df["n_controls_used"], errors="raise").astype(
+        np.int64
+    )
 
     delta_meta["row_id"] = pd.to_numeric(delta_meta["row_id"], errors="raise").astype(np.int64)
     delta_meta["treated_cell_id"] = delta_meta["treated_cell_id"].map(normalize_scalar)
-    delta_meta["n_controls_used"] = pd.to_numeric(delta_meta["n_controls_used"], errors="raise").astype(np.int64)
+    delta_meta["n_controls_used"] = pd.to_numeric(
+        delta_meta["n_controls_used"], errors="raise"
+    ).astype(np.int64)
     delta_meta["dataset_side"] = delta_meta["dataset_side"].astype(str).str.strip().str.upper()
     delta_meta = delta_meta.sort_values("row_id", kind="mergesort").reset_index(drop=True)
 
@@ -868,7 +897,9 @@ def main() -> int:
             "name": "delta_meta_row_id_contiguous",
             "pass": bool(row_alignment_input_ok),
             "details": {
-                "rules": ["delta_meta.row_id must be exactly 0..N-1 for strict row alignment contract"],
+                "rules": [
+                    "delta_meta.row_id must be exactly 0..N-1 for strict row alignment contract"
+                ],
                 "n_rows": n_rows,
             },
             "counterexamples": []
@@ -881,11 +912,15 @@ def main() -> int:
         print("[ERROR] delta_meta.row_id is not contiguous 0..N-1.", file=sys.stderr)
         return 9
 
-    pair_sorted = pair_df.sort_values(["dataset_side", "treated_cell_id", "control_rank"], kind="mergesort")
-    controls_by_key: Dict[Tuple[str, str], List[str]] = {}
-    pair_contract_violations: List[Dict[str, object]] = []
+    pair_sorted = pair_df.sort_values(
+        ["dataset_side", "treated_cell_id", "control_rank"], kind="mergesort"
+    )
+    controls_by_key: dict[tuple[str, str], list[str]] = {}
+    pair_contract_violations: list[dict[str, object]] = []
 
-    for (side, treated_cell_id), grp in pair_sorted.groupby(["dataset_side", "treated_cell_id"], sort=False):
+    for (side, treated_cell_id), grp in pair_sorted.groupby(
+        ["dataset_side", "treated_cell_id"], sort=False
+    ):
         controls = grp["control_cell_id"].astype(str).tolist()
         n_used_unique = grp["n_controls_used"].unique()
         if len(n_used_unique) != 1:
@@ -935,7 +970,7 @@ def main() -> int:
         print("[ERROR] pair_list grouping contract failed.", file=sys.stderr)
         return 10
 
-    required_by_side: Dict[str, set[str]] = {"CRISPR": set(), "DRUG": set()}
+    required_by_side: dict[str, set[str]] = {"CRISPR": set(), "DRUG": set()}
     missing_pair_keys = 0
     for row in delta_meta.itertuples(index=False):
         side = str(row.dataset_side)
@@ -965,8 +1000,10 @@ def main() -> int:
     try:
         performer_lm_cls, import_source = choose_scbert_performer(model_dir)
         ref_genes = load_reference_genes(ref_h5ad_path)
-        ref_gene_num = int(args.gene_num) if args.gene_num is not None else (
-            int(gene_num_cfg) if gene_num_cfg is not None else int(len(ref_genes))
+        ref_gene_num = (
+            int(args.gene_num)
+            if args.gene_num is not None
+            else (int(gene_num_cfg) if gene_num_cfg is not None else int(len(ref_genes)))
         )
         if ref_gene_num != len(ref_genes):
             raise RuntimeError(
@@ -1016,10 +1053,10 @@ def main() -> int:
         }
     )
 
-    side_vectors: Dict[str, Dict[str, np.ndarray]] = {}
-    side_stats: Dict[str, Dict[str, int]] = {}
-    side_chunk_errors: Dict[str, List[str]] = {}
-    emb_dim: Optional[int] = None
+    side_vectors: dict[str, dict[str, np.ndarray]] = {}
+    side_stats: dict[str, dict[str, int]] = {}
+    side_chunk_errors: dict[str, list[str]] = {}
+    emb_dim: int | None = None
 
     side_specs = [
         ("CRISPR", crispr_meta_path, crispr_counts_path),
@@ -1117,7 +1154,7 @@ def main() -> int:
             invalid_reason[row_id] = "treated_embedding_missing_or_invalid"
             continue
 
-        ctrl_vecs: List[np.ndarray] = []
+        ctrl_vecs: list[np.ndarray] = []
         missing_ctrl = False
         for control_id in controls:
             cvec = side_vectors.get(side, {}).get(control_id)
@@ -1138,8 +1175,12 @@ def main() -> int:
         fm_delta[row_id] = delta_vec.astype(np.float32, copy=False)
         valid_mask[row_id] = True
 
-    valid_finite_ok = bool(np.isfinite(fm_delta[valid_mask]).all()) if bool(valid_mask.any()) else True
-    invalid_nan_ok = bool(np.isnan(fm_delta[~valid_mask]).all()) if bool((~valid_mask).any()) else True
+    valid_finite_ok = (
+        bool(np.isfinite(fm_delta[valid_mask]).all()) if bool(valid_mask.any()) else True
+    )
+    invalid_nan_ok = (
+        bool(np.isnan(fm_delta[~valid_mask]).all()) if bool((~valid_mask).any()) else True
+    )
 
     assertions.append(
         {
@@ -1305,7 +1346,10 @@ def main() -> int:
             "embedding_dim": int(emb_dim),
             "n_valid": int(valid_mask.sum()),
             "n_invalid": int((~valid_mask).sum()),
-            "invalid_reason_top": pd.Series(invalid_reason[invalid_reason != ""]).value_counts().head(10).to_dict(),
+            "invalid_reason_top": pd.Series(invalid_reason[invalid_reason != ""])
+            .value_counts()
+            .head(10)
+            .to_dict(),
             "side_stats": side_stats,
             "mapped_gene_count": int(len(src_cols)),
         },
@@ -1314,7 +1358,7 @@ def main() -> int:
     write_json(run_manifest_path, run_manifest)
     write_json(audit_assertions_path, {"assertions": assertions})
 
-    manifest_entries: List[Dict[str, object]] = []
+    manifest_entries: list[dict[str, object]] = []
     for file_path in sorted(stage_dir.iterdir()):
         if file_path.is_file() and file_path.name != "manifest.json":
             manifest_entries.append(
@@ -1326,7 +1370,9 @@ def main() -> int:
             )
     write_json(manifest_path, {"stage": STAGE, "files": manifest_entries})
 
-    output_routing_stage_pass = all(path.resolve().is_relative_to(stage_dir.resolve()) for path in stage_outputs)
+    output_routing_stage_pass = all(
+        path.resolve().is_relative_to(stage_dir.resolve()) for path in stage_outputs
+    )
     if not output_routing_stage_pass:
         print("[ERROR] Stage output routing assertion failed.", file=sys.stderr)
         return 14

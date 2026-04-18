@@ -56,9 +56,10 @@ import shlex
 import subprocess
 import sys
 import tempfile
+from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -188,14 +189,18 @@ def resolve_state_assets(
     model_dir: Path,
     cfg: Mapping[str, object],
     args: argparse.Namespace,
-) -> Tuple[Path, Path, Optional[Path], str, str, Optional[int], int, Dict[str, str], Optional[Path]]:
-    sources: Dict[str, str] = {}
+) -> tuple[Path, Path, Path | None, str, str, int | None, int, dict[str, str], Path | None]:
+    sources: dict[str, str] = {}
     root = model_dir.resolve()
 
-    state_cmd = str(args.state_cmd) if args.state_cmd is not None else str(cfg.get("state_cmd", "state"))
-    embed_key = str(args.embed_key) if args.embed_key is not None else str(cfg.get("embed_key", "X_state"))
+    state_cmd = (
+        str(args.state_cmd) if args.state_cmd is not None else str(cfg.get("state_cmd", "state"))
+    )
+    embed_key = (
+        str(args.embed_key) if args.embed_key is not None else str(cfg.get("embed_key", "X_state"))
+    )
 
-    batch_size: Optional[int]
+    batch_size: int | None
     if args.batch_size is not None:
         batch_size = int(args.batch_size)
     elif "batch_size" in cfg and cfg["batch_size"] is not None:
@@ -210,10 +215,13 @@ def resolve_state_assets(
     else:
         cell_chunk_size = 2048
 
-    model_folder_candidates: List[Tuple[Path, str]] = []
+    model_folder_candidates: list[tuple[Path, str]] = []
     if "model_folder" in cfg and cfg["model_folder"] is not None:
         model_folder_candidates.append(
-            (resolve_config_path(project_root, str(cfg["model_folder"])), "config.fm_extractors.state.model_folder")
+            (
+                resolve_config_path(project_root, str(cfg["model_folder"])),
+                "config.fm_extractors.state.model_folder",
+            )
         )
     model_folder_candidates.extend(
         [
@@ -223,7 +231,7 @@ def resolve_state_assets(
         ]
     )
 
-    model_folder: Optional[Path] = None
+    model_folder: Path | None = None
     for p, source in model_folder_candidates:
         if p.is_dir():
             model_folder = p.resolve()
@@ -232,7 +240,7 @@ def resolve_state_assets(
     if model_folder is None:
         raise RuntimeError("Cannot resolve STATE model folder from --model-dir")
 
-    checkpoint: Optional[Path]
+    checkpoint: Path | None
     if args.checkpoint is not None:
         checkpoint = args.checkpoint.resolve()
         sources["checkpoint"] = "cli(--checkpoint)"
@@ -246,13 +254,23 @@ def resolve_state_assets(
             sources["checkpoint"] = "model_folder/*.ckpt(latest_mtime)"
 
     state_cmd_prefix = shlex.split(state_cmd)
-    state_cmd_path: Optional[Path] = None
+    state_cmd_path: Path | None = None
     if state_cmd_prefix:
         first = Path(state_cmd_prefix[0])
         if first.is_absolute() and first.exists():
             state_cmd_path = first
 
-    return root, model_folder, checkpoint, state_cmd, embed_key, batch_size, cell_chunk_size, sources, state_cmd_path
+    return (
+        root,
+        model_folder,
+        checkpoint,
+        state_cmd,
+        embed_key,
+        batch_size,
+        cell_chunk_size,
+        sources,
+        state_cmd_path,
+    )
 
 
 def write_state_input_h5ad(
@@ -285,12 +303,12 @@ def run_state_once(
     *,
     state_cmd: str,
     model_folder: Path,
-    checkpoint: Optional[Path],
+    checkpoint: Path | None,
     input_h5ad: Path,
     output_h5ad: Path,
     embed_key: str,
-    batch_size: Optional[int],
-) -> Tuple[bool, str]:
+    batch_size: int | None,
+) -> tuple[bool, str]:
     cmd = shlex.split(state_cmd) + [
         "emb",
         "transform",
@@ -335,7 +353,7 @@ def extract_state_aligned(
     output_h5ad: Path,
     expected_ids: Sequence[str],
     embed_key: str,
-) -> Tuple[np.ndarray, List[str], str]:
+) -> tuple[np.ndarray, list[str], str]:
     adata = read_h5ad(output_h5ad)
     keys = list(adata.obsm_keys())
 
@@ -368,15 +386,15 @@ def run_state_segment_with_retry(
     *,
     state_cmd: str,
     model_folder: Path,
-    checkpoint: Optional[Path],
+    checkpoint: Path | None,
     input_h5ad: Path,
     output_h5ad: Path,
     embed_key: str,
-    initial_batch_size: Optional[int],
+    initial_batch_size: int | None,
     expected_ids: Sequence[str],
-) -> Tuple[np.ndarray, Optional[int], Optional[str], Optional[str]]:
+) -> tuple[np.ndarray, int | None, str | None, str | None]:
     batch_size = initial_batch_size if initial_batch_size is not None else None
-    last_err: Optional[str] = None
+    last_err: str | None = None
 
     while True:
         ok, msg = run_state_once(
@@ -418,12 +436,12 @@ def extract_side_embeddings_state(
     gene_symbols: Sequence[str],
     state_cmd: str,
     model_folder: Path,
-    checkpoint: Optional[Path],
+    checkpoint: Path | None,
     embed_key: str,
-    batch_size: Optional[int],
+    batch_size: int | None,
     cell_chunk_size: int,
     stage_dir: Path,
-) -> Tuple[Dict[str, np.ndarray], Sequence[str], int, Dict[str, int], List[str]]:
+) -> tuple[dict[str, np.ndarray], Sequence[str], int, dict[str, int], list[str]]:
     meta = pd.read_csv(meta_path)
     id_col = choose_side_id_column(meta, side)
     meta_ids = meta[id_col].map(normalize_scalar).astype(str)
@@ -432,7 +450,7 @@ def extract_side_embeddings_state(
         dup = meta_ids.loc[meta_ids.duplicated()].head(MAX_COUNTEREXAMPLES).tolist()
         raise ValueError(f"{side} metadata id column has duplicates, examples={dup}")
 
-    id_to_row: Dict[str, int] = {cell_id: int(i) for i, cell_id in enumerate(meta_ids.tolist())}
+    id_to_row: dict[str, int] = {cell_id: int(i) for i, cell_id in enumerate(meta_ids.tolist())}
 
     counts_t = torch.load(counts_path, map_location="cpu")
     if not torch.is_tensor(counts_t):
@@ -451,10 +469,10 @@ def extract_side_embeddings_state(
     ordered_rows = present_rows[order]
     ordered_ids = [present_ids[int(i)] for i in order.tolist()]
 
-    vectors_by_cell: Dict[str, np.ndarray] = {}
+    vectors_by_cell: dict[str, np.ndarray] = {}
     invalid_cells: set[str] = set(missing_ids)
-    emb_dim: Optional[int] = None
-    chunk_errors: List[str] = []
+    emb_dim: int | None = None
+    chunk_errors: list[str] = []
 
     stats = {
         "n_required_cells": int(len(required_unique)),
@@ -472,7 +490,7 @@ def extract_side_embeddings_state(
         chunk_ids = ordered_ids[start:end]
         stats["n_chunks_total"] += 1
 
-        queue: List[np.ndarray] = [np.arange(len(chunk_rows), dtype=np.int64)]
+        queue: list[np.ndarray] = [np.arange(len(chunk_rows), dtype=np.int64)]
         segment_i = 0
         chunk_success = True
 
@@ -482,9 +500,17 @@ def extract_side_embeddings_state(
             seg_rows = chunk_rows[seg_local]
 
             seg_tensor = torch.as_tensor(seg_rows, dtype=torch.long)
-            seg_counts = counts_t.index_select(0, seg_tensor).detach().cpu().numpy().astype(np.float32, copy=False)
+            seg_counts = (
+                counts_t.index_select(0, seg_tensor)
+                .detach()
+                .cpu()
+                .numpy()
+                .astype(np.float32, copy=False)
+            )
 
-            with tempfile.TemporaryDirectory(prefix=f"state_{side}_{start}_{end}_seg{segment_i:04d}_", dir=str(stage_dir)) as tmp:
+            with tempfile.TemporaryDirectory(
+                prefix=f"state_{side}_{start}_{end}_seg{segment_i:04d}_", dir=str(stage_dir)
+            ) as tmp:
                 tmp_dir = Path(tmp)
                 input_h5ad = tmp_dir / f"chunk_{side}_{start}_{end}_seg{segment_i:04d}.h5ad"
                 output_h5ad = tmp_dir / f"chunk_{side}_{start}_{end}_seg{segment_i:04d}_state.h5ad"
@@ -510,7 +536,9 @@ def extract_side_embeddings_state(
                     )
 
                     if emb_matrix.size == 0:
-                        raise RuntimeError(f"STATE segment failed after retry (batch_size_final={used_bs}): {err}")
+                        raise RuntimeError(
+                            f"STATE segment failed after retry (batch_size_final={used_bs}): {err}"
+                        )
 
                     if emb_dim is None:
                         emb_dim = int(emb_matrix.shape[1])
@@ -519,7 +547,7 @@ def extract_side_embeddings_state(
                             f"Embedding dim mismatch: got={emb_matrix.shape[1]} expected={emb_dim}"
                         )
 
-                    for cid, vec in zip(seg_ids, emb_matrix):
+                    for cid, vec in zip(seg_ids, emb_matrix, strict=True):
                         if not np.isfinite(vec).all():
                             invalid_cells.add(cid)
                             continue
@@ -553,7 +581,9 @@ def extract_side_embeddings_state(
     del counts_t
 
     if emb_dim is None:
-        raise RuntimeError(f"{side} embedding failed for all chunks; cannot determine embedding dimension.")
+        raise RuntimeError(
+            f"{side} embedding failed for all chunks; cannot determine embedding dimension."
+        )
 
     return vectors_by_cell, sorted(invalid_cells), emb_dim, stats, chunk_errors
 
@@ -591,10 +621,10 @@ def main() -> int:
     stage_dir.mkdir(parents=True, exist_ok=True)
     started_at = utc_now_iso()
 
-    assertions: List[Dict[str, object]] = []
-    input_paths: List[Path] = []
-    snapshot_outputs: List[Path] = []
-    stage_outputs: List[Path] = []
+    assertions: list[dict[str, object]] = []
+    input_paths: list[Path] = []
+    snapshot_outputs: list[Path] = []
+    stage_outputs: list[Path] = []
 
     init_global_seed(GLOBAL_SEED)
     assertions.append(
@@ -614,7 +644,7 @@ def main() -> int:
     else:
         fm_cfg = {}
 
-    model_dir: Optional[Path]
+    model_dir: Path | None
     if args.model_dir is not None:
         model_dir = args.model_dir.resolve()
         model_dir_source = "cli(--model-dir)"
@@ -631,7 +661,9 @@ def main() -> int:
                 "name": "state_model_dir_resolved",
                 "pass": False,
                 "details": {
-                    "rules": ["STATE model dir must be provided by --model-dir or config.fm_extractors.state.model_dir"],
+                    "rules": [
+                        "STATE model dir must be provided by --model-dir or config.fm_extractors.state.model_dir"
+                    ],
                     "model_dir_source": model_dir_source,
                     "model_dir": str(model_dir) if model_dir else "NA",
                 },
@@ -653,7 +685,9 @@ def main() -> int:
             cell_chunk_size,
             asset_sources,
             state_cmd_path,
-        ) = resolve_state_assets(project_root=project_root, model_dir=model_dir, cfg=fm_cfg, args=args)
+        ) = resolve_state_assets(
+            project_root=project_root, model_dir=model_dir, cfg=fm_cfg, args=args
+        )
     except Exception as exc:  # noqa: BLE001
         assertions.append(
             {
@@ -718,7 +752,9 @@ def main() -> int:
                 "name": "task2_snapshot_inputs_present",
                 "pass": False,
                 "details": {"rules": ["All required inputs must exist."]},
-                "counterexamples": [{"missing_input": str(p)} for p in missing_inputs[:MAX_COUNTEREXAMPLES]],
+                "counterexamples": [
+                    {"missing_input": str(p)} for p in missing_inputs[:MAX_COUNTEREXAMPLES]
+                ],
             }
         )
         write_json(stage_dir / "audit_assertions.json", {"assertions": assertions})
@@ -787,7 +823,9 @@ def main() -> int:
         ["treated_cell_id", "control_cell_id", "control_rank", "n_controls_used", "dataset_side"],
         "pair_list.parquet",
     )
-    ensure_required_columns(delta_meta, ["row_id", "treated_cell_id", "n_controls_used"], "delta_meta.csv")
+    ensure_required_columns(
+        delta_meta, ["row_id", "treated_cell_id", "n_controls_used"], "delta_meta.csv"
+    )
 
     if "dataset_side" not in delta_meta.columns:
         if "perturbation_class" not in delta_meta.columns:
@@ -803,12 +841,18 @@ def main() -> int:
     pair_df["dataset_side"] = pair_df["dataset_side"].astype(str).str.strip().str.upper()
     pair_df["treated_cell_id"] = pair_df["treated_cell_id"].map(normalize_scalar)
     pair_df["control_cell_id"] = pair_df["control_cell_id"].map(normalize_scalar)
-    pair_df["control_rank"] = pd.to_numeric(pair_df["control_rank"], errors="raise").astype(np.int64)
-    pair_df["n_controls_used"] = pd.to_numeric(pair_df["n_controls_used"], errors="raise").astype(np.int64)
+    pair_df["control_rank"] = pd.to_numeric(pair_df["control_rank"], errors="raise").astype(
+        np.int64
+    )
+    pair_df["n_controls_used"] = pd.to_numeric(pair_df["n_controls_used"], errors="raise").astype(
+        np.int64
+    )
 
     delta_meta["row_id"] = pd.to_numeric(delta_meta["row_id"], errors="raise").astype(np.int64)
     delta_meta["treated_cell_id"] = delta_meta["treated_cell_id"].map(normalize_scalar)
-    delta_meta["n_controls_used"] = pd.to_numeric(delta_meta["n_controls_used"], errors="raise").astype(np.int64)
+    delta_meta["n_controls_used"] = pd.to_numeric(
+        delta_meta["n_controls_used"], errors="raise"
+    ).astype(np.int64)
     delta_meta["dataset_side"] = delta_meta["dataset_side"].astype(str).str.strip().str.upper()
     delta_meta = delta_meta.sort_values("row_id", kind="mergesort").reset_index(drop=True)
 
@@ -821,7 +865,9 @@ def main() -> int:
             "name": "delta_meta_row_id_contiguous",
             "pass": bool(row_alignment_input_ok),
             "details": {
-                "rules": ["delta_meta.row_id must be exactly 0..N-1 for strict row alignment contract"],
+                "rules": [
+                    "delta_meta.row_id must be exactly 0..N-1 for strict row alignment contract"
+                ],
                 "n_rows": n_rows,
             },
             "counterexamples": []
@@ -834,11 +880,15 @@ def main() -> int:
         print("[ERROR] delta_meta.row_id is not contiguous 0..N-1.", file=sys.stderr)
         return 9
 
-    pair_sorted = pair_df.sort_values(["dataset_side", "treated_cell_id", "control_rank"], kind="mergesort")
-    controls_by_key: Dict[Tuple[str, str], List[str]] = {}
-    pair_contract_violations: List[Dict[str, object]] = []
+    pair_sorted = pair_df.sort_values(
+        ["dataset_side", "treated_cell_id", "control_rank"], kind="mergesort"
+    )
+    controls_by_key: dict[tuple[str, str], list[str]] = {}
+    pair_contract_violations: list[dict[str, object]] = []
 
-    for (side, treated_cell_id), grp in pair_sorted.groupby(["dataset_side", "treated_cell_id"], sort=False):
+    for (side, treated_cell_id), grp in pair_sorted.groupby(
+        ["dataset_side", "treated_cell_id"], sort=False
+    ):
         controls = grp["control_cell_id"].astype(str).tolist()
         n_used_unique = grp["n_controls_used"].unique()
         if len(n_used_unique) != 1:
@@ -888,7 +938,7 @@ def main() -> int:
         print("[ERROR] pair_list grouping contract failed.", file=sys.stderr)
         return 10
 
-    required_by_side: Dict[str, set[str]] = {"CRISPR": set(), "DRUG": set()}
+    required_by_side: dict[str, set[str]] = {"CRISPR": set(), "DRUG": set()}
     missing_pair_keys = 0
     for row in delta_meta.itertuples(index=False):
         side = str(row.dataset_side)
@@ -915,10 +965,10 @@ def main() -> int:
         }
     )
 
-    side_vectors: Dict[str, Dict[str, np.ndarray]] = {}
-    side_stats: Dict[str, Dict[str, int]] = {}
-    side_chunk_errors: Dict[str, List[str]] = {}
-    emb_dim: Optional[int] = None
+    side_vectors: dict[str, dict[str, np.ndarray]] = {}
+    side_stats: dict[str, dict[str, int]] = {}
+    side_chunk_errors: dict[str, list[str]] = {}
+    emb_dim: int | None = None
 
     side_specs = [
         ("CRISPR", crispr_meta_path, crispr_counts_path),
@@ -1016,7 +1066,7 @@ def main() -> int:
             invalid_reason[row_id] = "treated_embedding_missing_or_invalid"
             continue
 
-        ctrl_vecs: List[np.ndarray] = []
+        ctrl_vecs: list[np.ndarray] = []
         missing_ctrl = False
         for control_id in controls:
             cvec = side_vectors.get(side, {}).get(control_id)
@@ -1037,8 +1087,12 @@ def main() -> int:
         fm_delta[row_id] = delta_vec.astype(np.float32, copy=False)
         valid_mask[row_id] = True
 
-    valid_finite_ok = bool(np.isfinite(fm_delta[valid_mask]).all()) if bool(valid_mask.any()) else True
-    invalid_nan_ok = bool(np.isnan(fm_delta[~valid_mask]).all()) if bool((~valid_mask).any()) else True
+    valid_finite_ok = (
+        bool(np.isfinite(fm_delta[valid_mask]).all()) if bool(valid_mask.any()) else True
+    )
+    invalid_nan_ok = (
+        bool(np.isnan(fm_delta[~valid_mask]).all()) if bool((~valid_mask).any()) else True
+    )
 
     assertions.append(
         {
@@ -1206,7 +1260,10 @@ def main() -> int:
             "embedding_dim": int(emb_dim),
             "n_valid": int(valid_mask.sum()),
             "n_invalid": int((~valid_mask).sum()),
-            "invalid_reason_top": pd.Series(invalid_reason[invalid_reason != ""]).value_counts().head(10).to_dict(),
+            "invalid_reason_top": pd.Series(invalid_reason[invalid_reason != ""])
+            .value_counts()
+            .head(10)
+            .to_dict(),
             "side_stats": side_stats,
         },
     }
@@ -1214,7 +1271,7 @@ def main() -> int:
     write_json(run_manifest_path, run_manifest)
     write_json(audit_assertions_path, {"assertions": assertions})
 
-    manifest_entries: List[Dict[str, object]] = []
+    manifest_entries: list[dict[str, object]] = []
     for file_path in sorted(stage_dir.iterdir()):
         if file_path.is_file() and file_path.name != "manifest.json":
             manifest_entries.append(
@@ -1226,7 +1283,9 @@ def main() -> int:
             )
     write_json(manifest_path, {"stage": STAGE, "files": manifest_entries})
 
-    output_routing_stage_pass = all(path.resolve().is_relative_to(stage_dir.resolve()) for path in stage_outputs)
+    output_routing_stage_pass = all(
+        path.resolve().is_relative_to(stage_dir.resolve()) for path in stage_outputs
+    )
     if not output_routing_stage_pass:
         print("[ERROR] Stage output routing assertion failed.", file=sys.stderr)
         return 13

@@ -56,9 +56,10 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -190,12 +191,14 @@ def choose_side_id_column(meta: pd.DataFrame, side: str) -> str:
 
 
 def looks_like_hf_model_dir(path: Path) -> bool:
-    return path.is_dir() and (path / "config.json").is_file() and (
-        (path / "model.safetensors").is_file() or (path / "pytorch_model.bin").is_file()
+    return (
+        path.is_dir()
+        and (path / "config.json").is_file()
+        and ((path / "model.safetensors").is_file() or (path / "pytorch_model.bin").is_file())
     )
 
 
-def first_existing_path(paths: Sequence[Path], expect: str) -> Optional[Path]:
+def first_existing_path(paths: Sequence[Path], expect: str) -> Path | None:
     for path in paths:
         if expect == "file" and path.is_file():
             return path.resolve()
@@ -204,7 +207,7 @@ def first_existing_path(paths: Sequence[Path], expect: str) -> Optional[Path]:
     return None
 
 
-def choose_geneformer_classes(code_root: Optional[Path]) -> Tuple[Any, Any, str]:
+def choose_geneformer_classes(code_root: Path | None) -> tuple[Any, Any, str]:
     try:
         from geneformer import EmbExtractor, TranscriptomeTokenizer  # type: ignore
 
@@ -230,11 +233,11 @@ def resolve_geneformer_assets(
     project_root: Path,
     model_dir: Path,
     cfg: Mapping[str, object],
-    gene_dict_override: Optional[Path],
-) -> Tuple[Optional[Path], Path, Path, Dict[str, str]]:
-    sources: Dict[str, str] = {}
+    gene_dict_override: Path | None,
+) -> tuple[Path | None, Path, Path, dict[str, str]]:
+    sources: dict[str, str] = {}
 
-    code_root: Optional[Path] = None
+    code_root: Path | None = None
     if (model_dir / "geneformer").is_dir():
         code_root = model_dir.resolve()
         sources["code_root"] = "model_dir"
@@ -242,7 +245,7 @@ def resolve_geneformer_assets(
         code_root = model_dir.parent.resolve()
         sources["code_root"] = "model_dir_parent"
 
-    pretrained_candidates: List[Tuple[Path, str]] = []
+    pretrained_candidates: list[tuple[Path, str]] = []
     if "pretrained_model_dir" in cfg and cfg["pretrained_model_dir"] is not None:
         p = resolve_config_path(project_root, str(cfg["pretrained_model_dir"]))
         pretrained_candidates.append((p, "config.fm_extractors.geneformer.pretrained_model_dir"))
@@ -252,11 +255,14 @@ def resolve_geneformer_assets(
             ((model_dir / "Geneformer-V2-104M").resolve(), "model_dir/Geneformer-V2-104M"),
             ((model_dir / "Geneformer-V2-316M").resolve(), "model_dir/Geneformer-V2-316M"),
             ((model_dir / "Geneformer-V1-10M").resolve(), "model_dir/Geneformer-V1-10M"),
-            ((model_dir.parent / "Geneformer-V2-104M").resolve(), "model_dir_parent/Geneformer-V2-104M"),
+            (
+                (model_dir.parent / "Geneformer-V2-104M").resolve(),
+                "model_dir_parent/Geneformer-V2-104M",
+            ),
         ]
     )
 
-    pretrained_model_dir: Optional[Path] = None
+    pretrained_model_dir: Path | None = None
     for candidate, source in pretrained_candidates:
         if looks_like_hf_model_dir(candidate):
             pretrained_model_dir = candidate.resolve()
@@ -267,7 +273,7 @@ def resolve_geneformer_assets(
             "Cannot resolve Geneformer pretrained model directory. Expected config.json + model weights."
         )
 
-    gene_dict_candidates: List[Tuple[Path, str]] = []
+    gene_dict_candidates: list[tuple[Path, str]] = []
     if gene_dict_override is not None:
         gene_dict_candidates.append((gene_dict_override.resolve(), "cli(--gene-dict-pkl)"))
     if "gene_mapping_file" in cfg and cfg["gene_mapping_file"] is not None:
@@ -286,12 +292,15 @@ def resolve_geneformer_assets(
         gene_dict_candidates.extend(
             [
                 (root / "geneformer/gene_name_id_dict_gc104M.pkl", f"{root}/geneformer"),
-                (root / "build/lib/geneformer/gene_name_id_dict_gc104M.pkl", f"{root}/build/lib/geneformer"),
+                (
+                    root / "build/lib/geneformer/gene_name_id_dict_gc104M.pkl",
+                    f"{root}/build/lib/geneformer",
+                ),
                 (root / "gene_name_id_dict_gc104M.pkl", f"{root}"),
             ]
         )
 
-    gene_mapping_file: Optional[Path] = None
+    gene_mapping_file: Path | None = None
     for candidate, source in gene_dict_candidates:
         if candidate.is_file():
             gene_mapping_file = candidate.resolve()
@@ -306,12 +315,12 @@ def resolve_geneformer_assets(
     return code_root, pretrained_model_dir, gene_mapping_file, sources
 
 
-def load_gene_symbol_to_ensembl(path: Path) -> Dict[str, str]:
+def load_gene_symbol_to_ensembl(path: Path) -> dict[str, str]:
     with path.open("rb") as handle:
         payload = pickle.load(handle)
     if not isinstance(payload, dict):
         raise TypeError(f"Expected dict in {path}, got {type(payload)}")
-    result: Dict[str, str] = {}
+    result: dict[str, str] = {}
     for key, value in payload.items():
         if key is None or value is None:
             continue
@@ -323,10 +332,12 @@ def load_gene_symbol_to_ensembl(path: Path) -> Dict[str, str]:
     return result
 
 
-def build_gene_mapping(shared_gene_symbols: Sequence[str], symbol2ens: Mapping[str, str]) -> Tuple[np.ndarray, List[str], List[str]]:
-    keep_cols: List[int] = []
-    kept_symbols: List[str] = []
-    kept_ens: List[str] = []
+def build_gene_mapping(
+    shared_gene_symbols: Sequence[str], symbol2ens: Mapping[str, str]
+) -> tuple[np.ndarray, list[str], list[str]]:
+    keep_cols: list[int] = []
+    kept_symbols: list[str] = []
+    kept_ens: list[str] = []
 
     for j, sym in enumerate(shared_gene_symbols):
         sym_clean = str(sym).strip()
@@ -457,7 +468,9 @@ def tokenize_h5ad_to_dataset_singlefile(
         ]
     )
     if not candidates:
-        raise FileNotFoundError(f"Geneformer tokenization finished but no .dataset found in {token_out_dir}")
+        raise FileNotFoundError(
+            f"Geneformer tokenization finished but no .dataset found in {token_out_dir}"
+        )
     return candidates[0].resolve()
 
 
@@ -472,7 +485,7 @@ def extract_embeddings_from_dataset(
     nproc: int,
     emb_mode: str,
     emb_layer: int,
-) -> Tuple[pd.DataFrame, np.ndarray]:
+) -> tuple[pd.DataFrame, np.ndarray]:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     embex = emb_extractor_cls(
@@ -506,11 +519,11 @@ def align_embeddings_to_chunk_ids(
     embs_df: pd.DataFrame,
     emb_arr: np.ndarray,
     chunk_ids: Sequence[str],
-) -> Tuple[Dict[str, np.ndarray], List[str], Optional[str]]:
+) -> tuple[dict[str, np.ndarray], list[str], str | None]:
     if emb_arr.shape[0] == 0:
         return {}, list(chunk_ids), "empty_embedding_rows"
 
-    cell_id_col: Optional[str] = None
+    cell_id_col: str | None = None
     if "cell_id" in embs_df.columns:
         cell_id_col = "cell_id"
     else:
@@ -519,15 +532,15 @@ def align_embeddings_to_chunk_ids(
                 cell_id_col = candidate
                 break
 
-    vectors_by_cell: Dict[str, np.ndarray] = {}
-    missing_cells: List[str] = []
+    vectors_by_cell: dict[str, np.ndarray] = {}
+    missing_cells: list[str] = []
 
     if cell_id_col is not None:
         emb_ids = embs_df[cell_id_col].astype(str).tolist()
         if len(emb_ids) != emb_arr.shape[0]:
             return {}, list(chunk_ids), f"id_length_mismatch:{len(emb_ids)}!={emb_arr.shape[0]}"
 
-        first_pos: Dict[str, int] = {}
+        first_pos: dict[str, int] = {}
         for idx, cell_id in enumerate(emb_ids):
             if cell_id not in first_pos:
                 first_pos[cell_id] = idx
@@ -569,9 +582,9 @@ def embed_chunk_with_retry(
     nproc: int,
     emb_mode: str,
     emb_layer: int,
-) -> Tuple[Optional[pd.DataFrame], Optional[np.ndarray], int, Optional[str]]:
+) -> tuple[pd.DataFrame | None, np.ndarray | None, int, str | None]:
     batch_size = max(1, int(initial_forward_batch_size))
-    last_error: Optional[str] = None
+    last_error: str | None = None
 
     while True:
         try:
@@ -617,7 +630,7 @@ def extract_side_embeddings_geneformer(
     use_h5ad_index: bool,
     force_retokenize: bool,
     stage_dir: Path,
-) -> Tuple[Dict[str, np.ndarray], Sequence[str], int, Dict[str, int], List[str]]:
+) -> tuple[dict[str, np.ndarray], Sequence[str], int, dict[str, int], list[str]]:
     meta = pd.read_csv(meta_path)
     id_col = choose_side_id_column(meta, side)
     meta_ids = meta[id_col].map(normalize_scalar).astype(str)
@@ -626,7 +639,7 @@ def extract_side_embeddings_geneformer(
         dup = meta_ids.loc[meta_ids.duplicated()].head(MAX_COUNTEREXAMPLES).tolist()
         raise ValueError(f"{side} metadata id column has duplicates, examples={dup}")
 
-    id_to_row: Dict[str, int] = {cell_id: int(i) for i, cell_id in enumerate(meta_ids.tolist())}
+    id_to_row: dict[str, int] = {cell_id: int(i) for i, cell_id in enumerate(meta_ids.tolist())}
 
     counts_t = torch.load(counts_path, map_location="cpu")
     if not torch.is_tensor(counts_t):
@@ -645,10 +658,10 @@ def extract_side_embeddings_geneformer(
     ordered_rows = present_rows[order]
     ordered_ids = [present_ids[int(i)] for i in order.tolist()]
 
-    vectors_by_cell: Dict[str, np.ndarray] = {}
+    vectors_by_cell: dict[str, np.ndarray] = {}
     invalid_cells: set[str] = set(missing_ids)
-    emb_dim: Optional[int] = None
-    chunk_errors: List[str] = []
+    emb_dim: int | None = None
+    chunk_errors: list[str] = []
 
     stats = {
         "n_required_cells": int(len(required_unique)),
@@ -669,7 +682,9 @@ def extract_side_embeddings_geneformer(
         chunk_meta = meta.iloc[chunk_rows].copy().reset_index(drop=True)
 
         chunk_prefix = f"{side.lower()}_{start}_{end}"
-        with tempfile.TemporaryDirectory(prefix=f"geneformer_{chunk_prefix}_", dir=str(stage_dir)) as tmp_dir_str:
+        with tempfile.TemporaryDirectory(
+            prefix=f"geneformer_{chunk_prefix}_", dir=str(stage_dir)
+        ) as tmp_dir_str:
             tmp_dir = Path(tmp_dir_str)
             h5ad_path = tmp_dir / f"{chunk_prefix}.h5ad"
             token_dir = tmp_dir / "tokenized"
@@ -800,10 +815,10 @@ def main() -> int:
     stage_dir.mkdir(parents=True, exist_ok=True)
     started_at = utc_now_iso()
 
-    assertions: List[Dict[str, object]] = []
-    input_paths: List[Path] = []
-    snapshot_outputs: List[Path] = []
-    stage_outputs: List[Path] = []
+    assertions: list[dict[str, object]] = []
+    input_paths: list[Path] = []
+    snapshot_outputs: list[Path] = []
+    stage_outputs: list[Path] = []
 
     init_global_seed(GLOBAL_SEED)
     assertions.append(
@@ -823,7 +838,7 @@ def main() -> int:
     else:
         fm_cfg = {}
 
-    model_dir: Optional[Path]
+    model_dir: Path | None
     if args.model_dir is not None:
         model_dir = args.model_dir.resolve()
         model_dir_source = "cli(--model-dir)"
@@ -854,11 +869,13 @@ def main() -> int:
         return 5
 
     try:
-        code_root, pretrained_model_dir, gene_mapping_file, asset_sources = resolve_geneformer_assets(
-            project_root=project_root,
-            model_dir=model_dir,
-            cfg=fm_cfg,
-            gene_dict_override=args.gene_dict_pkl,
+        code_root, pretrained_model_dir, gene_mapping_file, asset_sources = (
+            resolve_geneformer_assets(
+                project_root=project_root,
+                model_dir=model_dir,
+                cfg=fm_cfg,
+                gene_dict_override=args.gene_dict_pkl,
+            )
         )
     except Exception as exc:  # noqa: BLE001
         assertions.append(
@@ -882,9 +899,13 @@ def main() -> int:
     use_h5ad_index_cfg = bool(fm_cfg.get("use_h5ad_index", True))
 
     nproc = int(args.nproc) if args.nproc is not None else nproc_cfg
-    cell_chunk_size = int(args.cell_chunk_size) if args.cell_chunk_size is not None else cell_chunk_cfg
+    cell_chunk_size = (
+        int(args.cell_chunk_size) if args.cell_chunk_size is not None else cell_chunk_cfg
+    )
     tokenizer_chunk_size = (
-        int(args.tokenizer_chunk_size) if args.tokenizer_chunk_size is not None else tokenizer_chunk_cfg
+        int(args.tokenizer_chunk_size)
+        if args.tokenizer_chunk_size is not None
+        else tokenizer_chunk_cfg
     )
     forward_batch_size = (
         int(args.forward_batch_size) if args.forward_batch_size is not None else fwd_bs_cfg
@@ -948,7 +969,9 @@ def main() -> int:
                 "name": "task2_snapshot_inputs_present",
                 "pass": False,
                 "details": {"rules": ["All required inputs must exist."]},
-                "counterexamples": [{"missing_input": str(p)} for p in missing_inputs[:MAX_COUNTEREXAMPLES]],
+                "counterexamples": [
+                    {"missing_input": str(p)} for p in missing_inputs[:MAX_COUNTEREXAMPLES]
+                ],
             }
         )
         write_json(stage_dir / "audit_assertions.json", {"assertions": assertions})
@@ -1015,7 +1038,9 @@ def main() -> int:
         ["treated_cell_id", "control_cell_id", "control_rank", "n_controls_used", "dataset_side"],
         "pair_list.parquet",
     )
-    ensure_required_columns(delta_meta, ["row_id", "treated_cell_id", "n_controls_used"], "delta_meta.csv")
+    ensure_required_columns(
+        delta_meta, ["row_id", "treated_cell_id", "n_controls_used"], "delta_meta.csv"
+    )
 
     if "dataset_side" not in delta_meta.columns:
         if "perturbation_class" not in delta_meta.columns:
@@ -1032,12 +1057,18 @@ def main() -> int:
     pair_df["dataset_side"] = pair_df["dataset_side"].astype(str).str.strip().str.upper()
     pair_df["treated_cell_id"] = pair_df["treated_cell_id"].map(normalize_scalar)
     pair_df["control_cell_id"] = pair_df["control_cell_id"].map(normalize_scalar)
-    pair_df["control_rank"] = pd.to_numeric(pair_df["control_rank"], errors="raise").astype(np.int64)
-    pair_df["n_controls_used"] = pd.to_numeric(pair_df["n_controls_used"], errors="raise").astype(np.int64)
+    pair_df["control_rank"] = pd.to_numeric(pair_df["control_rank"], errors="raise").astype(
+        np.int64
+    )
+    pair_df["n_controls_used"] = pd.to_numeric(pair_df["n_controls_used"], errors="raise").astype(
+        np.int64
+    )
 
     delta_meta["row_id"] = pd.to_numeric(delta_meta["row_id"], errors="raise").astype(np.int64)
     delta_meta["treated_cell_id"] = delta_meta["treated_cell_id"].map(normalize_scalar)
-    delta_meta["n_controls_used"] = pd.to_numeric(delta_meta["n_controls_used"], errors="raise").astype(np.int64)
+    delta_meta["n_controls_used"] = pd.to_numeric(
+        delta_meta["n_controls_used"], errors="raise"
+    ).astype(np.int64)
     delta_meta["dataset_side"] = delta_meta["dataset_side"].astype(str).str.strip().str.upper()
     delta_meta = delta_meta.sort_values("row_id", kind="mergesort").reset_index(drop=True)
 
@@ -1050,7 +1081,9 @@ def main() -> int:
             "name": "delta_meta_row_id_contiguous",
             "pass": bool(row_alignment_input_ok),
             "details": {
-                "rules": ["delta_meta.row_id must be exactly 0..N-1 for strict row alignment contract"],
+                "rules": [
+                    "delta_meta.row_id must be exactly 0..N-1 for strict row alignment contract"
+                ],
                 "n_rows": n_rows,
             },
             "counterexamples": []
@@ -1063,11 +1096,15 @@ def main() -> int:
         print("[ERROR] delta_meta.row_id is not contiguous 0..N-1.", file=sys.stderr)
         return 9
 
-    pair_sorted = pair_df.sort_values(["dataset_side", "treated_cell_id", "control_rank"], kind="mergesort")
-    controls_by_key: Dict[Tuple[str, str], List[str]] = {}
-    pair_contract_violations: List[Dict[str, object]] = []
+    pair_sorted = pair_df.sort_values(
+        ["dataset_side", "treated_cell_id", "control_rank"], kind="mergesort"
+    )
+    controls_by_key: dict[tuple[str, str], list[str]] = {}
+    pair_contract_violations: list[dict[str, object]] = []
 
-    for (side, treated_cell_id), grp in pair_sorted.groupby(["dataset_side", "treated_cell_id"], sort=False):
+    for (side, treated_cell_id), grp in pair_sorted.groupby(
+        ["dataset_side", "treated_cell_id"], sort=False
+    ):
         controls = grp["control_cell_id"].astype(str).tolist()
         n_used_unique = grp["n_controls_used"].unique()
         if len(n_used_unique) != 1:
@@ -1117,7 +1154,7 @@ def main() -> int:
         print("[ERROR] pair_list grouping contract failed.", file=sys.stderr)
         return 10
 
-    required_by_side: Dict[str, set[str]] = {"CRISPR": set(), "DRUG": set()}
+    required_by_side: dict[str, set[str]] = {"CRISPR": set(), "DRUG": set()}
     missing_pair_keys = 0
     for row in delta_meta.itertuples(index=False):
         side = str(row.dataset_side)
@@ -1145,7 +1182,9 @@ def main() -> int:
     )
 
     try:
-        transcriptome_tokenizer_cls, emb_extractor_cls, import_source = choose_geneformer_classes(code_root)
+        transcriptome_tokenizer_cls, emb_extractor_cls, import_source = choose_geneformer_classes(
+            code_root
+        )
         symbol2ens = load_gene_symbol_to_ensembl(gene_mapping_file)
         keep_cols, kept_symbols, kept_ens = build_gene_mapping(shared_gene_symbols, symbol2ens)
     except Exception as exc:  # noqa: BLE001
@@ -1174,10 +1213,10 @@ def main() -> int:
         }
     )
 
-    side_vectors: Dict[str, Dict[str, np.ndarray]] = {}
-    side_stats: Dict[str, Dict[str, int]] = {}
-    side_chunk_errors: Dict[str, List[str]] = {}
-    emb_dim: Optional[int] = None
+    side_vectors: dict[str, dict[str, np.ndarray]] = {}
+    side_stats: dict[str, dict[str, int]] = {}
+    side_chunk_errors: dict[str, list[str]] = {}
+    emb_dim: int | None = None
 
     side_specs = [
         ("CRISPR", crispr_meta_path, crispr_counts_path),
@@ -1186,26 +1225,28 @@ def main() -> int:
 
     for side, meta_path, counts_path in side_specs:
         try:
-            vectors, _invalid_cells, side_dim, stats, chunk_errors = extract_side_embeddings_geneformer(
-                side=side,
-                meta_path=meta_path,
-                counts_path=counts_path,
-                required_cell_ids=sorted(required_by_side.get(side, set())),
-                keep_cols=keep_cols,
-                kept_symbols=kept_symbols,
-                kept_ens=kept_ens,
-                transcriptome_tokenizer_cls=transcriptome_tokenizer_cls,
-                emb_extractor_cls=emb_extractor_cls,
-                pretrained_model_dir=pretrained_model_dir,
-                nproc=nproc,
-                cell_chunk_size=cell_chunk_size,
-                tokenizer_chunk_size=tokenizer_chunk_size,
-                forward_batch_size=forward_batch_size,
-                emb_mode=emb_mode,
-                emb_layer=emb_layer,
-                use_h5ad_index=use_h5ad_index,
-                force_retokenize=args.force_retokenize,
-                stage_dir=stage_dir,
+            vectors, _invalid_cells, side_dim, stats, chunk_errors = (
+                extract_side_embeddings_geneformer(
+                    side=side,
+                    meta_path=meta_path,
+                    counts_path=counts_path,
+                    required_cell_ids=sorted(required_by_side.get(side, set())),
+                    keep_cols=keep_cols,
+                    kept_symbols=kept_symbols,
+                    kept_ens=kept_ens,
+                    transcriptome_tokenizer_cls=transcriptome_tokenizer_cls,
+                    emb_extractor_cls=emb_extractor_cls,
+                    pretrained_model_dir=pretrained_model_dir,
+                    nproc=nproc,
+                    cell_chunk_size=cell_chunk_size,
+                    tokenizer_chunk_size=tokenizer_chunk_size,
+                    forward_batch_size=forward_batch_size,
+                    emb_mode=emb_mode,
+                    emb_layer=emb_layer,
+                    use_h5ad_index=use_h5ad_index,
+                    force_retokenize=args.force_retokenize,
+                    stage_dir=stage_dir,
+                )
             )
         except Exception as exc:  # noqa: BLE001
             assertions.append(
@@ -1282,7 +1323,7 @@ def main() -> int:
             invalid_reason[row_id] = "treated_embedding_missing_or_invalid"
             continue
 
-        ctrl_vecs: List[np.ndarray] = []
+        ctrl_vecs: list[np.ndarray] = []
         missing_ctrl = False
         for control_id in controls:
             cvec = side_vectors.get(side, {}).get(control_id)
@@ -1303,8 +1344,12 @@ def main() -> int:
         fm_delta[row_id] = delta_vec.astype(np.float32, copy=False)
         valid_mask[row_id] = True
 
-    valid_finite_ok = bool(np.isfinite(fm_delta[valid_mask]).all()) if bool(valid_mask.any()) else True
-    invalid_nan_ok = bool(np.isnan(fm_delta[~valid_mask]).all()) if bool((~valid_mask).any()) else True
+    valid_finite_ok = (
+        bool(np.isfinite(fm_delta[valid_mask]).all()) if bool(valid_mask.any()) else True
+    )
+    invalid_nan_ok = (
+        bool(np.isnan(fm_delta[~valid_mask]).all()) if bool((~valid_mask).any()) else True
+    )
 
     assertions.append(
         {
@@ -1445,7 +1490,9 @@ def main() -> int:
     run_manifest = {
         "run_id": args.run_id,
         "stage": STAGE,
-        "script_path": str((project_root / "scripts/fm_extractors/extract_geneformer.py").resolve()),
+        "script_path": str(
+            (project_root / "scripts/fm_extractors/extract_geneformer.py").resolve()
+        ),
         "git_head": safe_git_head(project_root),
         "started_at": started_at,
         "completed_at": completed_at,
@@ -1474,7 +1521,10 @@ def main() -> int:
             "embedding_dim": int(emb_dim),
             "n_valid": int(valid_mask.sum()),
             "n_invalid": int((~valid_mask).sum()),
-            "invalid_reason_top": pd.Series(invalid_reason[invalid_reason != ""]).value_counts().head(10).to_dict(),
+            "invalid_reason_top": pd.Series(invalid_reason[invalid_reason != ""])
+            .value_counts()
+            .head(10)
+            .to_dict(),
             "side_stats": side_stats,
             "mappable_gene_count": int(len(keep_cols)),
         },
@@ -1483,7 +1533,7 @@ def main() -> int:
     write_json(run_manifest_path, run_manifest)
     write_json(audit_assertions_path, {"assertions": assertions})
 
-    manifest_entries: List[Dict[str, object]] = []
+    manifest_entries: list[dict[str, object]] = []
     for file_path in sorted(stage_dir.iterdir()):
         if file_path.is_file() and file_path.name != "manifest.json":
             manifest_entries.append(
@@ -1495,7 +1545,9 @@ def main() -> int:
             )
     write_json(manifest_path, {"stage": STAGE, "files": manifest_entries})
 
-    output_routing_stage_pass = all(path.resolve().is_relative_to(stage_dir.resolve()) for path in stage_outputs)
+    output_routing_stage_pass = all(
+        path.resolve().is_relative_to(stage_dir.resolve()) for path in stage_outputs
+    )
     if not output_routing_stage_pass:
         print("[ERROR] Stage output routing assertion failed.", file=sys.stderr)
         return 14
