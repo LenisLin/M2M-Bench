@@ -1,33 +1,39 @@
 # Data Contracts
 
-This file is an index to the active frozen data contracts. It is not a second
-schema source.
+This file indexes the current contract surfaces for task data, result objects,
+and manuscript analysis.
 
-## Authoritative contract files
+## Contract Map
 
-- `docs/contracts/task1_spec.md`: Task1 instance tables, split-half rules, cross alignment, retrieval, and frozen constants.
-- `docs/contracts/task2_spec.md`: corrected multisource Task2 snapshot, cohort identity, representation scope, retrieval semantics, and readiness rules.
-- `docs/contracts/output-schemas.md`: stage-level plot-ready, audit-ready, and S7 project-level output schemas. It is not the manuscript-facing canonical object registry.
-- `docs/plotting/plotting_preparation_freeze.md`: frozen panel manifest, plot-ready support outputs, and R plotting namespace plan for the plotting-preparation phase.
-- `docs/governance/runbook.md`: stage routing, manifest requirements, and canonical stage outputs.
-- `docs/manuscript_master.md`: frozen manuscript-facing figure logic, canonical downstream object list, and current support vs historical boundaries.
+- `docs/redesign_checkpoint.md`: benchmark-wide terminology and figure split
+- `docs/contracts/task1_spec.md`: Task1 units, retrieval rules, and metric scope
+- `docs/contracts/task2_spec.md`: Task2 units, directions, and cohort rules
+- `docs/contracts/output-schemas.md`: stage output tables and manifest payloads
+- `docs/manuscript_master.md`: main manuscript structure and figure roles
+- `docs/plotting/plotting_preparation_freeze.md`: plot-ready assembly and
+  rendering boundary
 
-## Frozen data roots
+## Current Naming
 
-- `/mnt/NAS_21T/ProjectData/M2M/snapshots/task1_snapshot_v1/`: the only Task1 snapshot root.
-- `/mnt/NAS_21T/ProjectData/M2M/snapshots/task2_snapshot_v1/`: legacy/interim scPerturb-K562 Task2 evidence only.
-- `/mnt/NAS_21T/ProjectData/M2M/snapshots/task2_snapshot_v2/`: corrected multisource Task2 successor root.
+- `Task1` unit identity uses `perturbation_gene`.
+- `Task2` unit identity uses `anchor_gene`.
+- Retrieval rows use `query_instance_id`.
+- Pattern tables use `pair_mean_enrichment`.
+- Aggregated Task2 tables stay keyed by `anchor_gene`.
+- Row-level identity stays in `perturbation_gene`.
 
-## Evidence-first validation
+## Active Roots
 
-- Materialized corrected Task2 snapshot facts must be checked against `/mnt/NAS_21T/ProjectData/M2M/snapshots/task2_snapshot_v2/snapshot_manifest.json`.
-- Stage-level output truth must be checked against the audited stage manifest and assertion files under the configured NAS-backed run root. `runs/<run_id>/<stage>/...` remains a stage-contract notation and may be absent from a local checkout.
-- If this index conflicts with the contract files above or audited manifests, the contract files and audited manifests win.
+- Task1 data: `/mnt/NAS_21T/ProjectData/M2M/data/task1`
+- Task2 data: `/mnt/NAS_21T/ProjectData/M2M/data/task2`
+- Stage runs: `/mnt/NAS_21T/ProjectData/M2M/runs`
+- Manuscript analysis: `/mnt/NAS_21T/ProjectData/M2M/runs/manuscript_active/analysis`
 
-## Manuscript-facing alignment notes
+## Validation Rule
 
-- Figure 1 is doc-derived in the current frozen phase. There is no dedicated canonical Figure 1 analysis object to hunt for under `analysis/`.
-- The frozen Figure 2/Figure 3 canonical downstream object registry lives in `docs/manuscript_master.md` and `/mnt/NAS_21T/ProjectData/M2M/runs/manuscript_active/analysis/framework_analysis_manifest.json`.
-- `/mnt/NAS_21T/ProjectData/M2M/runs/manuscript_support/plot_ready/` is the active support-only downstream plotting layer. It is not a new canonical evidence root and should be interpreted through the freeze note plus the `output-schemas.md` plot-ready section.
-- `/mnt/NAS_21T/ProjectData/M2M/archive/manuscript_history/` is the retained historical manuscript root. Files there remain discoverable historical evidence, not current canonical outputs.
-- The manuscript-facing biological indexing unit is `(dataset, cell_line, target, perturbation_type)`, but the current corrected Task2 code contract still keys cohorts on `mech_key=(dataset, cell_line, target_token)`. Treat that as a documented layering distinction, not as proof that S3-S6 semantics have already changed.
+- Stage tables are validated by the stage manifest, audit assertions, and
+  per-table manifest stored under the stage run directory.
+- Task data facts are validated against manifests stored inside the active task
+  roots.
+- If this file disagrees with audited manifests or contract docs, the audited
+  manifests and contract docs win.

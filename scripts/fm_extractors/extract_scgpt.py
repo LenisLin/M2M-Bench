@@ -51,13 +51,13 @@ import csv
 import hashlib
 import inspect
 import json
-import os
 import random
 import subprocess
 import sys
+from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -82,7 +82,9 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Override scGPT checkpoint directory configured in config/config.yaml",
     )
-    parser.add_argument("--device", type=str, default=None, help="Override device, e.g. cuda or cpu")
+    parser.add_argument(
+        "--device", type=str, default=None, help="Override device, e.g. cuda or cpu"
+    )
     parser.add_argument("--batch-size", type=int, default=None, help="Override scGPT batch size")
     parser.add_argument("--chunk-size", type=int, default=None, help="Override cell chunk size")
     parser.add_argument("--max-length", type=int, default=None, help="Override max sequence length")
@@ -190,8 +192,8 @@ def call_scgpt_embed_data(
     sig = inspect.signature(embed_fn)
     params = sig.parameters
 
-    kwargs: Dict[str, Any] = {}
-    pos_args: List[Any] = []
+    kwargs: dict[str, Any] = {}
+    pos_args: list[Any] = []
 
     if "adata_or_file" in params:
         kwargs["adata_or_file"] = adata
@@ -255,9 +257,9 @@ def embed_chunk_with_retry(
     initial_batch_size: int,
     device: str,
     use_fast_transformer: bool,
-) -> Tuple[Optional[np.ndarray], int, Optional[str]]:
+) -> tuple[np.ndarray | None, int, str | None]:
     batch_size = max(1, int(initial_batch_size))
-    last_error: Optional[str] = None
+    last_error: str | None = None
 
     while True:
         try:
@@ -328,7 +330,7 @@ def extract_side_embeddings(
     chunk_size: int,
     device: str,
     use_fast_transformer: bool,
-) -> Tuple[Dict[str, np.ndarray], Sequence[str], int, Dict[str, int], List[str]]:
+) -> tuple[dict[str, np.ndarray], Sequence[str], int, dict[str, int], list[str]]:
     meta = pd.read_csv(meta_path)
     id_col = choose_side_id_column(meta, side)
     meta_ids = meta[id_col].map(normalize_scalar).astype(str)
@@ -337,7 +339,7 @@ def extract_side_embeddings(
         dup = meta_ids.loc[meta_ids.duplicated()].head(MAX_COUNTEREXAMPLES).tolist()
         raise ValueError(f"{side} metadata id column has duplicates, examples={dup}")
 
-    id_to_row: Dict[str, int] = {cell_id: int(i) for i, cell_id in enumerate(meta_ids.tolist())}
+    id_to_row: dict[str, int] = {cell_id: int(i) for i, cell_id in enumerate(meta_ids.tolist())}
 
     counts_t = torch.load(counts_path, map_location="cpu")
     if not torch.is_tensor(counts_t):
@@ -355,10 +357,10 @@ def extract_side_embeddings(
     ordered_rows = present_rows[order]
     ordered_ids = [present_ids[int(i)] for i in order.tolist()]
 
-    vectors_by_cell: Dict[str, np.ndarray] = {}
+    vectors_by_cell: dict[str, np.ndarray] = {}
     invalid_cells: set[str] = set(missing_ids)
-    emb_dim: Optional[int] = None
-    chunk_errors: List[str] = []
+    emb_dim: int | None = None
+    chunk_errors: list[str] = []
     stats = {
         "n_required_cells": int(len(required_unique)),
         "n_missing_in_meta": int(len(missing_ids)),
@@ -430,7 +432,7 @@ def extract_side_embeddings(
             continue
 
         stats["n_chunks_succeeded"] += 1
-        for cell_id, vec in zip(chunk_ids, matrix):
+        for cell_id, vec in zip(chunk_ids, matrix, strict=True):
             if not np.isfinite(vec).all():
                 invalid_cells.add(cell_id)
                 continue
@@ -447,7 +449,7 @@ def extract_side_embeddings(
     return vectors_by_cell, sorted(invalid_cells), emb_dim, stats, chunk_errors
 
 
-def load_max_length(model_dir: Path, cfg: Mapping[str, object]) -> Tuple[int, Optional[Path], str]:
+def load_max_length(model_dir: Path, cfg: Mapping[str, object]) -> tuple[int, Path | None, str]:
     if "max_length" in cfg and cfg["max_length"] is not None:
         return int(cfg["max_length"]), None, "config.fm_extractors.scgpt.max_length"
 
@@ -494,10 +496,10 @@ def main() -> int:
     stage_dir.mkdir(parents=True, exist_ok=True)
     started_at = utc_now_iso()
 
-    assertions: List[Dict[str, object]] = []
-    input_paths: List[Path] = []
-    snapshot_outputs: List[Path] = []
-    stage_outputs: List[Path] = []
+    assertions: list[dict[str, object]] = []
+    input_paths: list[Path] = []
+    snapshot_outputs: list[Path] = []
+    stage_outputs: list[Path] = []
 
     init_global_seed(GLOBAL_SEED)
     try:
@@ -524,7 +526,7 @@ def main() -> int:
     else:
         scgpt_cfg = {}
 
-    model_dir: Optional[Path]
+    model_dir: Path | None
     if args.model_dir is not None:
         model_dir = args.model_dir.resolve()
         model_dir_source = "cli(--model-dir)"
@@ -616,7 +618,9 @@ def main() -> int:
                 "name": "task2_snapshot_inputs_present",
                 "pass": False,
                 "details": {"rules": ["All required task2 snapshot inputs must exist."]},
-                "counterexamples": [{"missing_input": str(p)} for p in missing_inputs[:MAX_COUNTEREXAMPLES]],
+                "counterexamples": [
+                    {"missing_input": str(p)} for p in missing_inputs[:MAX_COUNTEREXAMPLES]
+                ],
             }
         )
         write_json(stage_dir / "audit_assertions.json", {"assertions": assertions})
@@ -666,8 +670,14 @@ def main() -> int:
         print(f"[ERROR] Failed loading snapshot inputs: {exc}", file=sys.stderr)
         return 7
 
-    ensure_required_columns(pair_df, ["treated_cell_id", "control_cell_id", "control_rank", "n_controls_used", "dataset_side"], "pair_list.parquet")
-    ensure_required_columns(delta_meta, ["row_id", "treated_cell_id", "n_controls_used"], "delta_meta.csv")
+    ensure_required_columns(
+        pair_df,
+        ["treated_cell_id", "control_cell_id", "control_rank", "n_controls_used", "dataset_side"],
+        "pair_list.parquet",
+    )
+    ensure_required_columns(
+        delta_meta, ["row_id", "treated_cell_id", "n_controls_used"], "delta_meta.csv"
+    )
     if "dataset_side" not in delta_meta.columns:
         if "perturbation_class" not in delta_meta.columns:
             raise ValueError("delta_meta.csv requires dataset_side or perturbation_class")
@@ -683,12 +693,18 @@ def main() -> int:
     pair_df["dataset_side"] = pair_df["dataset_side"].astype(str).str.strip().str.upper()
     pair_df["treated_cell_id"] = pair_df["treated_cell_id"].map(normalize_scalar)
     pair_df["control_cell_id"] = pair_df["control_cell_id"].map(normalize_scalar)
-    pair_df["control_rank"] = pd.to_numeric(pair_df["control_rank"], errors="raise").astype(np.int64)
-    pair_df["n_controls_used"] = pd.to_numeric(pair_df["n_controls_used"], errors="raise").astype(np.int64)
+    pair_df["control_rank"] = pd.to_numeric(pair_df["control_rank"], errors="raise").astype(
+        np.int64
+    )
+    pair_df["n_controls_used"] = pd.to_numeric(pair_df["n_controls_used"], errors="raise").astype(
+        np.int64
+    )
 
     delta_meta["row_id"] = pd.to_numeric(delta_meta["row_id"], errors="raise").astype(np.int64)
     delta_meta["treated_cell_id"] = delta_meta["treated_cell_id"].map(normalize_scalar)
-    delta_meta["n_controls_used"] = pd.to_numeric(delta_meta["n_controls_used"], errors="raise").astype(np.int64)
+    delta_meta["n_controls_used"] = pd.to_numeric(
+        delta_meta["n_controls_used"], errors="raise"
+    ).astype(np.int64)
     delta_meta["dataset_side"] = delta_meta["dataset_side"].astype(str).str.strip().str.upper()
     delta_meta = delta_meta.sort_values("row_id", kind="mergesort").reset_index(drop=True)
 
@@ -701,7 +717,9 @@ def main() -> int:
             "name": "delta_meta_row_id_contiguous",
             "pass": bool(row_alignment_input_ok),
             "details": {
-                "rules": ["delta_meta.row_id must be exactly 0..N-1 for strict row alignment contract"],
+                "rules": [
+                    "delta_meta.row_id must be exactly 0..N-1 for strict row alignment contract"
+                ],
                 "n_rows": n_rows,
             },
             "counterexamples": []
@@ -717,10 +735,12 @@ def main() -> int:
     pair_sorted = pair_df.sort_values(
         ["dataset_side", "treated_cell_id", "control_rank"], kind="mergesort"
     )
-    controls_by_key: Dict[Tuple[str, str], List[str]] = {}
-    pair_contract_violations: List[Dict[str, object]] = []
+    controls_by_key: dict[tuple[str, str], list[str]] = {}
+    pair_contract_violations: list[dict[str, object]] = []
 
-    for (side, treated_cell_id), grp in pair_sorted.groupby(["dataset_side", "treated_cell_id"], sort=False):
+    for (side, treated_cell_id), grp in pair_sorted.groupby(
+        ["dataset_side", "treated_cell_id"], sort=False
+    ):
         controls = grp["control_cell_id"].astype(str).tolist()
         n_used_unique = grp["n_controls_used"].unique()
         if len(n_used_unique) != 1:
@@ -770,7 +790,7 @@ def main() -> int:
         print("[ERROR] pair_list grouping contract failed.", file=sys.stderr)
         return 9
 
-    required_by_side: Dict[str, set[str]] = {"CRISPR": set(), "DRUG": set()}
+    required_by_side: dict[str, set[str]] = {"CRISPR": set(), "DRUG": set()}
     missing_pair_keys = 0
     for row in delta_meta.itertuples(index=False):
         side = str(row.dataset_side)
@@ -812,10 +832,10 @@ def main() -> int:
         print(f"[ERROR] {exc}", file=sys.stderr)
         return 10
 
-    side_vectors: Dict[str, Dict[str, np.ndarray]] = {}
-    side_stats: Dict[str, Dict[str, int]] = {}
-    side_chunk_errors: Dict[str, List[str]] = {}
-    emb_dim: Optional[int] = None
+    side_vectors: dict[str, dict[str, np.ndarray]] = {}
+    side_stats: dict[str, dict[str, int]] = {}
+    side_chunk_errors: dict[str, list[str]] = {}
+    emb_dim: int | None = None
 
     side_specs = [
         ("CRISPR", crispr_meta_path, crispr_counts_path),
@@ -913,7 +933,7 @@ def main() -> int:
             invalid_reason[row_id] = "treated_embedding_missing_or_invalid"
             continue
 
-        ctrl_vecs: List[np.ndarray] = []
+        ctrl_vecs: list[np.ndarray] = []
         missing_ctrl = False
         for control_id in controls:
             cvec = side_vectors.get(side, {}).get(control_id)
@@ -934,8 +954,12 @@ def main() -> int:
         fm_delta[row_id] = delta_vec.astype(np.float32, copy=False)
         valid_mask[row_id] = True
 
-    valid_finite_ok = bool(np.isfinite(fm_delta[valid_mask]).all()) if bool(valid_mask.any()) else True
-    invalid_nan_ok = bool(np.isnan(fm_delta[~valid_mask]).all()) if bool((~valid_mask).any()) else True
+    valid_finite_ok = (
+        bool(np.isfinite(fm_delta[valid_mask]).all()) if bool(valid_mask.any()) else True
+    )
+    invalid_nan_ok = (
+        bool(np.isnan(fm_delta[~valid_mask]).all()) if bool((~valid_mask).any()) else True
+    )
 
     assertions.append(
         {
@@ -1064,10 +1088,7 @@ def main() -> int:
     manifest_path = (stage_dir / "manifest.json").resolve()
     stage_outputs.extend([run_manifest_path, audit_assertions_path, manifest_path])
 
-    output_paths = [
-        str(path.resolve())
-        for path in (snapshot_outputs + stage_outputs)
-    ]
+    output_paths = [str(path.resolve()) for path in (snapshot_outputs + stage_outputs)]
 
     run_manifest = {
         "run_id": args.run_id,
@@ -1096,7 +1117,10 @@ def main() -> int:
             "embedding_dim": int(emb_dim),
             "n_valid": int(valid_mask.sum()),
             "n_invalid": int((~valid_mask).sum()),
-            "invalid_reason_top": pd.Series(invalid_reason[invalid_reason != ""]).value_counts().head(10).to_dict(),
+            "invalid_reason_top": pd.Series(invalid_reason[invalid_reason != ""])
+            .value_counts()
+            .head(10)
+            .to_dict(),
             "side_stats": side_stats,
         },
     }
@@ -1104,7 +1128,7 @@ def main() -> int:
     write_json(run_manifest_path, run_manifest)
     write_json(audit_assertions_path, {"assertions": assertions})
 
-    manifest_entries: List[Dict[str, object]] = []
+    manifest_entries: list[dict[str, object]] = []
     for file_path in sorted(stage_dir.iterdir()):
         if file_path.is_file() and file_path.name != "manifest.json":
             manifest_entries.append(

@@ -55,9 +55,10 @@ import random
 import subprocess
 import sys
 import tempfile
+from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -83,7 +84,9 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Override UCE root configured in config/config.yaml",
     )
-    parser.add_argument("--python-bin", type=str, default=None, help="Python executable for eval_single_anndata.py")
+    parser.add_argument(
+        "--python-bin", type=str, default=None, help="Python executable for eval_single_anndata.py"
+    )
     parser.add_argument("--species", type=str, default=None)
     parser.add_argument("--batch-size", type=int, default=None)
     parser.add_argument("--cell-chunk-size", type=int, default=None)
@@ -188,14 +191,14 @@ def resolve_uce_assets(
     model_dir: Path,
     cfg: Mapping[str, object],
     args: argparse.Namespace,
-) -> Tuple[Path, Path, Path, Path, Path, Path, Dict[str, str]]:
-    sources: Dict[str, str] = {}
+) -> tuple[Path, Path, Path, Path, Path, Path, dict[str, str]]:
+    sources: dict[str, str] = {}
     root = model_dir.resolve()
 
     eval_script_candidates = [
         (root / "eval_single_anndata.py", "model_dir/eval_single_anndata.py"),
     ]
-    eval_script: Optional[Path] = None
+    eval_script: Path | None = None
     for p, source in eval_script_candidates:
         if p.is_file():
             eval_script = p.resolve()
@@ -228,7 +231,9 @@ def resolve_uce_assets(
         protein_embeddings_dir = args.protein_embeddings_dir.resolve()
         sources["protein_embeddings_dir"] = "cli(--protein-embeddings-dir)"
     elif "protein_embeddings_dir" in cfg and cfg["protein_embeddings_dir"] is not None:
-        protein_embeddings_dir = resolve_config_path(project_root, str(cfg["protein_embeddings_dir"]))
+        protein_embeddings_dir = resolve_config_path(
+            project_root, str(cfg["protein_embeddings_dir"])
+        )
         sources["protein_embeddings_dir"] = "config.fm_extractors.uce.protein_embeddings_dir"
     else:
         protein_embeddings_dir = (root / "model_files/protein_embeddings").resolve()
@@ -306,7 +311,7 @@ def run_uce_once(
     protein_embeddings_dir: Path,
     spec_chrom_csv: Path,
     offset_pkl: Path,
-) -> Tuple[bool, str]:
+) -> tuple[bool, str]:
     work_dir.mkdir(parents=True, exist_ok=True)
     work_dir_arg = str(work_dir) + ("" if str(work_dir).endswith("/") else "/")
 
@@ -357,7 +362,9 @@ def find_uce_output_h5ad(work_dir: Path, input_h5ad: Path) -> Path:
     if expected.is_file():
         return expected.resolve()
 
-    candidates = sorted(work_dir.glob("*_uce_adata.h5ad"), key=lambda p: p.stat().st_mtime, reverse=True)
+    candidates = sorted(
+        work_dir.glob("*_uce_adata.h5ad"), key=lambda p: p.stat().st_mtime, reverse=True
+    )
     if candidates:
         return candidates[0].resolve()
 
@@ -383,11 +390,13 @@ def extract_uce_aligned(
     output_h5ad: Path,
     expected_ids: Sequence[str],
     obsm_key: str = "X_uce",
-) -> Tuple[np.ndarray, List[str]]:
+) -> tuple[np.ndarray, list[str]]:
     adata = read_h5ad(output_h5ad)
 
     if obsm_key not in adata.obsm_keys():
-        raise KeyError(f"Expected embeddings in adata.obsm['{obsm_key}'], keys={list(adata.obsm_keys())}")
+        raise KeyError(
+            f"Expected embeddings in adata.obsm['{obsm_key}'], keys={list(adata.obsm_keys())}"
+        )
 
     emb = np.asarray(adata.obsm[obsm_key], dtype=np.float32)
     if emb.ndim != 2:
@@ -420,9 +429,9 @@ def run_uce_segment_with_retry(
     spec_chrom_csv: Path,
     offset_pkl: Path,
     expected_ids: Sequence[str],
-) -> Tuple[np.ndarray, int, Optional[str]]:
+) -> tuple[np.ndarray, int, str | None]:
     batch_size = max(1, int(initial_batch_size))
-    last_err: Optional[str] = None
+    last_err: str | None = None
 
     while True:
         ok, msg = run_uce_once(
@@ -476,7 +485,7 @@ def extract_side_embeddings_uce(
     offset_pkl: Path,
     cell_chunk_size: int,
     stage_dir: Path,
-) -> Tuple[Dict[str, np.ndarray], Sequence[str], int, Dict[str, int], List[str]]:
+) -> tuple[dict[str, np.ndarray], Sequence[str], int, dict[str, int], list[str]]:
     meta = pd.read_csv(meta_path)
     id_col = choose_side_id_column(meta, side)
     meta_ids = meta[id_col].map(normalize_scalar).astype(str)
@@ -485,7 +494,7 @@ def extract_side_embeddings_uce(
         dup = meta_ids.loc[meta_ids.duplicated()].head(MAX_COUNTEREXAMPLES).tolist()
         raise ValueError(f"{side} metadata id column has duplicates, examples={dup}")
 
-    id_to_row: Dict[str, int] = {cell_id: int(i) for i, cell_id in enumerate(meta_ids.tolist())}
+    id_to_row: dict[str, int] = {cell_id: int(i) for i, cell_id in enumerate(meta_ids.tolist())}
 
     counts_t = torch.load(counts_path, map_location="cpu")
     if not torch.is_tensor(counts_t):
@@ -504,10 +513,10 @@ def extract_side_embeddings_uce(
     ordered_rows = present_rows[order]
     ordered_ids = [present_ids[int(i)] for i in order.tolist()]
 
-    vectors_by_cell: Dict[str, np.ndarray] = {}
+    vectors_by_cell: dict[str, np.ndarray] = {}
     invalid_cells: set[str] = set(missing_ids)
-    emb_dim: Optional[int] = None
-    chunk_errors: List[str] = []
+    emb_dim: int | None = None
+    chunk_errors: list[str] = []
 
     stats = {
         "n_required_cells": int(len(required_unique)),
@@ -525,7 +534,7 @@ def extract_side_embeddings_uce(
         chunk_ids = ordered_ids[start:end]
         stats["n_chunks_total"] += 1
 
-        queue: List[np.ndarray] = [np.arange(len(chunk_rows), dtype=np.int64)]
+        queue: list[np.ndarray] = [np.arange(len(chunk_rows), dtype=np.int64)]
         segment_i = 0
         chunk_success = True
 
@@ -535,9 +544,17 @@ def extract_side_embeddings_uce(
             seg_rows = chunk_rows[seg_local]
 
             seg_tensor = torch.as_tensor(seg_rows, dtype=torch.long)
-            seg_counts = counts_t.index_select(0, seg_tensor).detach().cpu().numpy().astype(np.float32, copy=False)
+            seg_counts = (
+                counts_t.index_select(0, seg_tensor)
+                .detach()
+                .cpu()
+                .numpy()
+                .astype(np.float32, copy=False)
+            )
 
-            with tempfile.TemporaryDirectory(prefix=f"uce_{side}_{start}_{end}_seg{segment_i:04d}_", dir=str(stage_dir)) as tmp:
+            with tempfile.TemporaryDirectory(
+                prefix=f"uce_{side}_{start}_{end}_seg{segment_i:04d}_", dir=str(stage_dir)
+            ) as tmp:
                 tmp_dir = Path(tmp)
                 input_h5ad = tmp_dir / f"chunk_{side}_{start}_{end}_seg{segment_i:04d}.h5ad"
                 work_dir = tmp_dir / "uce_work"
@@ -570,7 +587,9 @@ def extract_side_embeddings_uce(
                     )
 
                     if emb_matrix.size == 0:
-                        raise RuntimeError(f"UCE segment failed after retry (batch_size_final={used_bs}): {err}")
+                        raise RuntimeError(
+                            f"UCE segment failed after retry (batch_size_final={used_bs}): {err}"
+                        )
 
                     if emb_dim is None:
                         emb_dim = int(emb_matrix.shape[1])
@@ -579,7 +598,7 @@ def extract_side_embeddings_uce(
                             f"Embedding dim mismatch: got={emb_matrix.shape[1]} expected={emb_dim}"
                         )
 
-                    for cid, vec in zip(seg_ids, emb_matrix):
+                    for cid, vec in zip(seg_ids, emb_matrix, strict=True):
                         if not np.isfinite(vec).all():
                             invalid_cells.add(cid)
                             continue
@@ -613,7 +632,9 @@ def extract_side_embeddings_uce(
     del counts_t
 
     if emb_dim is None:
-        raise RuntimeError(f"{side} embedding failed for all chunks; cannot determine embedding dimension.")
+        raise RuntimeError(
+            f"{side} embedding failed for all chunks; cannot determine embedding dimension."
+        )
 
     return vectors_by_cell, sorted(invalid_cells), emb_dim, stats, chunk_errors
 
@@ -651,10 +672,10 @@ def main() -> int:
     stage_dir.mkdir(parents=True, exist_ok=True)
     started_at = utc_now_iso()
 
-    assertions: List[Dict[str, object]] = []
-    input_paths: List[Path] = []
-    snapshot_outputs: List[Path] = []
-    stage_outputs: List[Path] = []
+    assertions: list[dict[str, object]] = []
+    input_paths: list[Path] = []
+    snapshot_outputs: list[Path] = []
+    stage_outputs: list[Path] = []
 
     init_global_seed(GLOBAL_SEED)
     assertions.append(
@@ -674,7 +695,7 @@ def main() -> int:
     else:
         fm_cfg = {}
 
-    model_dir: Optional[Path]
+    model_dir: Path | None
     if args.model_dir is not None:
         model_dir = args.model_dir.resolve()
         model_dir_source = "cli(--model-dir)"
@@ -691,7 +712,9 @@ def main() -> int:
                 "name": "uce_model_dir_resolved",
                 "pass": False,
                 "details": {
-                    "rules": ["UCE model dir must be provided by --model-dir or config.fm_extractors.uce.model_dir"],
+                    "rules": [
+                        "UCE model dir must be provided by --model-dir or config.fm_extractors.uce.model_dir"
+                    ],
                     "model_dir_source": model_dir_source,
                     "model_dir": str(model_dir) if model_dir else "NA",
                 },
@@ -712,7 +735,9 @@ def main() -> int:
             spec_chrom_csv,
             offset_pkl,
             asset_sources,
-        ) = resolve_uce_assets(project_root=project_root, model_dir=model_dir, cfg=fm_cfg, args=args)
+        ) = resolve_uce_assets(
+            project_root=project_root, model_dir=model_dir, cfg=fm_cfg, args=args
+        )
     except Exception as exc:  # noqa: BLE001
         assertions.append(
             {
@@ -728,12 +753,20 @@ def main() -> int:
 
     python_bin = args.python_bin if args.python_bin else str(fm_cfg.get("python_bin", "python"))
     species = str(args.species) if args.species is not None else str(fm_cfg.get("species", "human"))
-    batch_size = int(args.batch_size) if args.batch_size is not None else int(fm_cfg.get("batch_size", 24))
+    batch_size = (
+        int(args.batch_size) if args.batch_size is not None else int(fm_cfg.get("batch_size", 24))
+    )
     cell_chunk_size = (
-        int(args.cell_chunk_size) if args.cell_chunk_size is not None else int(fm_cfg.get("cell_chunk_size", 2048))
+        int(args.cell_chunk_size)
+        if args.cell_chunk_size is not None
+        else int(fm_cfg.get("cell_chunk_size", 2048))
     )
     nlayers = int(args.nlayers) if args.nlayers is not None else int(fm_cfg.get("nlayers", 4))
-    sample_size = int(args.sample_size) if args.sample_size is not None else int(fm_cfg.get("sample_size", 1024))
+    sample_size = (
+        int(args.sample_size)
+        if args.sample_size is not None
+        else int(fm_cfg.get("sample_size", 1024))
+    )
 
     assertions.append(
         {
@@ -793,7 +826,9 @@ def main() -> int:
                 "name": "task2_snapshot_inputs_present",
                 "pass": False,
                 "details": {"rules": ["All required inputs must exist."]},
-                "counterexamples": [{"missing_input": str(p)} for p in missing_inputs[:MAX_COUNTEREXAMPLES]],
+                "counterexamples": [
+                    {"missing_input": str(p)} for p in missing_inputs[:MAX_COUNTEREXAMPLES]
+                ],
             }
         )
         write_json(stage_dir / "audit_assertions.json", {"assertions": assertions})
@@ -863,7 +898,9 @@ def main() -> int:
         ["treated_cell_id", "control_cell_id", "control_rank", "n_controls_used", "dataset_side"],
         "pair_list.parquet",
     )
-    ensure_required_columns(delta_meta, ["row_id", "treated_cell_id", "n_controls_used"], "delta_meta.csv")
+    ensure_required_columns(
+        delta_meta, ["row_id", "treated_cell_id", "n_controls_used"], "delta_meta.csv"
+    )
 
     if "dataset_side" not in delta_meta.columns:
         if "perturbation_class" not in delta_meta.columns:
@@ -879,12 +916,18 @@ def main() -> int:
     pair_df["dataset_side"] = pair_df["dataset_side"].astype(str).str.strip().str.upper()
     pair_df["treated_cell_id"] = pair_df["treated_cell_id"].map(normalize_scalar)
     pair_df["control_cell_id"] = pair_df["control_cell_id"].map(normalize_scalar)
-    pair_df["control_rank"] = pd.to_numeric(pair_df["control_rank"], errors="raise").astype(np.int64)
-    pair_df["n_controls_used"] = pd.to_numeric(pair_df["n_controls_used"], errors="raise").astype(np.int64)
+    pair_df["control_rank"] = pd.to_numeric(pair_df["control_rank"], errors="raise").astype(
+        np.int64
+    )
+    pair_df["n_controls_used"] = pd.to_numeric(pair_df["n_controls_used"], errors="raise").astype(
+        np.int64
+    )
 
     delta_meta["row_id"] = pd.to_numeric(delta_meta["row_id"], errors="raise").astype(np.int64)
     delta_meta["treated_cell_id"] = delta_meta["treated_cell_id"].map(normalize_scalar)
-    delta_meta["n_controls_used"] = pd.to_numeric(delta_meta["n_controls_used"], errors="raise").astype(np.int64)
+    delta_meta["n_controls_used"] = pd.to_numeric(
+        delta_meta["n_controls_used"], errors="raise"
+    ).astype(np.int64)
     delta_meta["dataset_side"] = delta_meta["dataset_side"].astype(str).str.strip().str.upper()
     delta_meta = delta_meta.sort_values("row_id", kind="mergesort").reset_index(drop=True)
 
@@ -897,7 +940,9 @@ def main() -> int:
             "name": "delta_meta_row_id_contiguous",
             "pass": bool(row_alignment_input_ok),
             "details": {
-                "rules": ["delta_meta.row_id must be exactly 0..N-1 for strict row alignment contract"],
+                "rules": [
+                    "delta_meta.row_id must be exactly 0..N-1 for strict row alignment contract"
+                ],
                 "n_rows": n_rows,
             },
             "counterexamples": []
@@ -910,11 +955,15 @@ def main() -> int:
         print("[ERROR] delta_meta.row_id is not contiguous 0..N-1.", file=sys.stderr)
         return 9
 
-    pair_sorted = pair_df.sort_values(["dataset_side", "treated_cell_id", "control_rank"], kind="mergesort")
-    controls_by_key: Dict[Tuple[str, str], List[str]] = {}
-    pair_contract_violations: List[Dict[str, object]] = []
+    pair_sorted = pair_df.sort_values(
+        ["dataset_side", "treated_cell_id", "control_rank"], kind="mergesort"
+    )
+    controls_by_key: dict[tuple[str, str], list[str]] = {}
+    pair_contract_violations: list[dict[str, object]] = []
 
-    for (side, treated_cell_id), grp in pair_sorted.groupby(["dataset_side", "treated_cell_id"], sort=False):
+    for (side, treated_cell_id), grp in pair_sorted.groupby(
+        ["dataset_side", "treated_cell_id"], sort=False
+    ):
         controls = grp["control_cell_id"].astype(str).tolist()
         n_used_unique = grp["n_controls_used"].unique()
         if len(n_used_unique) != 1:
@@ -964,7 +1013,7 @@ def main() -> int:
         print("[ERROR] pair_list grouping contract failed.", file=sys.stderr)
         return 10
 
-    required_by_side: Dict[str, set[str]] = {"CRISPR": set(), "DRUG": set()}
+    required_by_side: dict[str, set[str]] = {"CRISPR": set(), "DRUG": set()}
     missing_pair_keys = 0
     for row in delta_meta.itertuples(index=False):
         side = str(row.dataset_side)
@@ -991,10 +1040,10 @@ def main() -> int:
         }
     )
 
-    side_vectors: Dict[str, Dict[str, np.ndarray]] = {}
-    side_stats: Dict[str, Dict[str, int]] = {}
-    side_chunk_errors: Dict[str, List[str]] = {}
-    emb_dim: Optional[int] = None
+    side_vectors: dict[str, dict[str, np.ndarray]] = {}
+    side_stats: dict[str, dict[str, int]] = {}
+    side_chunk_errors: dict[str, list[str]] = {}
+    emb_dim: int | None = None
 
     side_specs = [
         ("CRISPR", crispr_meta_path, crispr_counts_path),
@@ -1099,7 +1148,7 @@ def main() -> int:
             invalid_reason[row_id] = "treated_embedding_missing_or_invalid"
             continue
 
-        ctrl_vecs: List[np.ndarray] = []
+        ctrl_vecs: list[np.ndarray] = []
         missing_ctrl = False
         for control_id in controls:
             cvec = side_vectors.get(side, {}).get(control_id)
@@ -1120,8 +1169,12 @@ def main() -> int:
         fm_delta[row_id] = delta_vec.astype(np.float32, copy=False)
         valid_mask[row_id] = True
 
-    valid_finite_ok = bool(np.isfinite(fm_delta[valid_mask]).all()) if bool(valid_mask.any()) else True
-    invalid_nan_ok = bool(np.isnan(fm_delta[~valid_mask]).all()) if bool((~valid_mask).any()) else True
+    valid_finite_ok = (
+        bool(np.isfinite(fm_delta[valid_mask]).all()) if bool(valid_mask.any()) else True
+    )
+    invalid_nan_ok = (
+        bool(np.isnan(fm_delta[~valid_mask]).all()) if bool((~valid_mask).any()) else True
+    )
 
     assertions.append(
         {
@@ -1301,7 +1354,10 @@ def main() -> int:
             "embedding_dim": int(emb_dim),
             "n_valid": int(valid_mask.sum()),
             "n_invalid": int((~valid_mask).sum()),
-            "invalid_reason_top": pd.Series(invalid_reason[invalid_reason != ""]).value_counts().head(10).to_dict(),
+            "invalid_reason_top": pd.Series(invalid_reason[invalid_reason != ""])
+            .value_counts()
+            .head(10)
+            .to_dict(),
             "side_stats": side_stats,
         },
     }
@@ -1309,7 +1365,7 @@ def main() -> int:
     write_json(run_manifest_path, run_manifest)
     write_json(audit_assertions_path, {"assertions": assertions})
 
-    manifest_entries: List[Dict[str, object]] = []
+    manifest_entries: list[dict[str, object]] = []
     for file_path in sorted(stage_dir.iterdir()):
         if file_path.is_file() and file_path.name != "manifest.json":
             manifest_entries.append(
@@ -1321,7 +1377,9 @@ def main() -> int:
             )
     write_json(manifest_path, {"stage": STAGE, "files": manifest_entries})
 
-    output_routing_stage_pass = all(path.resolve().is_relative_to(stage_dir.resolve()) for path in stage_outputs)
+    output_routing_stage_pass = all(
+        path.resolve().is_relative_to(stage_dir.resolve()) for path in stage_outputs
+    )
     if not output_routing_stage_pass:
         print("[ERROR] Stage output routing assertion failed.", file=sys.stderr)
         return 13

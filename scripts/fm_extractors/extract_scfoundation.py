@@ -55,9 +55,10 @@ import random
 import subprocess
 import sys
 import tempfile
+from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -83,7 +84,9 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Override scFoundation root configured in config/config.yaml",
     )
-    parser.add_argument("--python-bin", type=str, default=None, help="Python executable for get_embedding.py")
+    parser.add_argument(
+        "--python-bin", type=str, default=None, help="Python executable for get_embedding.py"
+    )
     parser.add_argument("--version", type=str, default=None)
     parser.add_argument("--tgthighres", type=str, default=None)
     parser.add_argument("--pool-type", type=str, default=None)
@@ -169,7 +172,7 @@ def choose_side_id_column(meta: pd.DataFrame, side: str) -> str:
     raise ValueError(f"Unable to locate cell-id column for side={side}")
 
 
-def load_scfoundation_gene_list(path: Path, to_upper: bool) -> List[str]:
+def load_scfoundation_gene_list(path: Path, to_upper: bool) -> list[str]:
     try:
         df = pd.read_csv(path, sep="\t")
         if "gene_name" in df.columns:
@@ -184,7 +187,9 @@ def load_scfoundation_gene_list(path: Path, to_upper: bool) -> List[str]:
     return genes
 
 
-def build_gene_mapper(shared_genes: Sequence[str], sf_genes: Sequence[str], to_upper: bool) -> Tuple[np.ndarray, np.ndarray]:
+def build_gene_mapper(
+    shared_genes: Sequence[str], sf_genes: Sequence[str], to_upper: bool
+) -> tuple[np.ndarray, np.ndarray]:
     if to_upper:
         src_names = [str(g).upper() for g in shared_genes]
         tgt_names = [str(g).upper() for g in sf_genes]
@@ -192,9 +197,9 @@ def build_gene_mapper(shared_genes: Sequence[str], sf_genes: Sequence[str], to_u
         src_names = [str(g) for g in shared_genes]
         tgt_names = [str(g) for g in sf_genes]
 
-    sf_index: Dict[str, int] = {g: i for i, g in enumerate(tgt_names)}
-    src_cols: List[int] = []
-    tgt_cols: List[int] = []
+    sf_index: dict[str, int] = {g: i for i, g in enumerate(tgt_names)}
+    src_cols: list[int] = []
+    tgt_cols: list[int] = []
     for j, gene in enumerate(src_names):
         idx = sf_index.get(gene)
         if idx is None:
@@ -263,7 +268,9 @@ def estimate_positive_token_count(
     extra1 = np.zeros_like(extra2, dtype=np.int32)
 
     mode = str(tgthighres).strip()[:1].lower()
-    value = _safe_float(str(tgthighres).strip()[1:] if len(str(tgthighres).strip()) > 1 else "0", 0.0)
+    value = _safe_float(
+        str(tgthighres).strip()[1:] if len(str(tgthighres).strip()) > 1 else "0", 0.0
+    )
     if mode == "f":
         if value > 0:
             threshold = 1.0 / float(value)
@@ -282,10 +289,12 @@ def select_inference_rows(
     x_csr: Any,
     tgthighres: str,
     min_positive_tokens: int,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     row_sum = np.asarray(x_csr.sum(axis=1)).reshape(-1).astype(np.float32, copy=False)
     row_nnz = _row_nonzero_feature_count(x_csr)
-    pos_tokens = estimate_positive_token_count(row_sum=row_sum, row_nnz=row_nnz, tgthighres=tgthighres)
+    pos_tokens = estimate_positive_token_count(
+        row_sum=row_sum, row_nnz=row_nnz, tgthighres=tgthighres
+    )
 
     nonzero_mask = row_sum > 0
     token_safe_mask = pos_tokens >= int(min_positive_tokens)
@@ -326,7 +335,7 @@ def run_scfoundation_once(
     tgthighres: str,
     pool_type: str,
     pre_normalized: str,
-) -> Tuple[bool, str]:
+) -> tuple[bool, str]:
     save_path.mkdir(parents=True, exist_ok=True)
 
     cmd = [
@@ -371,12 +380,14 @@ def pick_latest_embedding_file(save_path: Path, task_name: str) -> Path:
         f"*{task_name}*cell_embedding*.npy",
         f"{task_name}*.npy",
     ]
-    candidates: List[Path] = []
+    candidates: list[Path] = []
     for p in patterns:
         candidates.extend(save_path.glob(p))
     unique = sorted(set(candidates), key=lambda x: x.stat().st_mtime, reverse=True)
     if not unique:
-        raise FileNotFoundError(f"No scFoundation embedding npy found under {save_path} for task={task_name}")
+        raise FileNotFoundError(
+            f"No scFoundation embedding npy found under {save_path} for task={task_name}"
+        )
     return unique[0]
 
 
@@ -395,8 +406,10 @@ def extract_segment_embedding(
     tgthighres: str,
     pool_type: str,
     pre_normalized: str,
-) -> Tuple[np.ndarray, Optional[str]]:
-    with tempfile.TemporaryDirectory(prefix=f"scfoundation_{side}_{chunk_tag}_{seg_tag}_", dir=str(stage_dir)) as tmp:
+) -> tuple[np.ndarray, str | None]:
+    with tempfile.TemporaryDirectory(
+        prefix=f"scfoundation_{side}_{chunk_tag}_{seg_tag}_", dir=str(stage_dir)
+    ) as tmp:
         tmp_dir = Path(tmp)
         h5ad_path = tmp_dir / f"input_{side}_{chunk_tag}_{seg_tag}.h5ad"
         save_path = tmp_dir / "out"
@@ -449,7 +462,7 @@ def extract_side_embeddings_scfoundation(
     cell_chunk_size: int,
     min_positive_tokens: int,
     stage_dir: Path,
-) -> Tuple[Dict[str, np.ndarray], Sequence[str], int, Dict[str, int], List[str]]:
+) -> tuple[dict[str, np.ndarray], Sequence[str], int, dict[str, int], list[str]]:
     meta = pd.read_csv(meta_path)
     id_col = choose_side_id_column(meta, side)
     meta_ids = meta[id_col].map(normalize_scalar).astype(str)
@@ -458,7 +471,7 @@ def extract_side_embeddings_scfoundation(
         dup = meta_ids.loc[meta_ids.duplicated()].head(MAX_COUNTEREXAMPLES).tolist()
         raise ValueError(f"{side} metadata id column has duplicates, examples={dup}")
 
-    id_to_row: Dict[str, int] = {cell_id: int(i) for i, cell_id in enumerate(meta_ids.tolist())}
+    id_to_row: dict[str, int] = {cell_id: int(i) for i, cell_id in enumerate(meta_ids.tolist())}
 
     counts_t = torch.load(counts_path, map_location="cpu")
     if not torch.is_tensor(counts_t):
@@ -476,10 +489,10 @@ def extract_side_embeddings_scfoundation(
     ordered_rows = present_rows[order]
     ordered_ids = [present_ids[int(i)] for i in order.tolist()]
 
-    vectors_by_cell: Dict[str, np.ndarray] = {}
+    vectors_by_cell: dict[str, np.ndarray] = {}
     invalid_cells: set[str] = set(missing_ids)
-    emb_dim: Optional[int] = None
-    chunk_errors: List[str] = []
+    emb_dim: int | None = None
+    chunk_errors: list[str] = []
 
     stats = {
         "n_required_cells": int(len(required_unique)),
@@ -502,7 +515,13 @@ def extract_side_embeddings_scfoundation(
         stats["n_chunks_total"] += 1
 
         row_tensor = torch.as_tensor(chunk_rows, dtype=torch.long)
-        chunk_dense = counts_t.index_select(0, row_tensor).detach().cpu().numpy().astype(np.float32, copy=False)
+        chunk_dense = (
+            counts_t.index_select(0, row_tensor)
+            .detach()
+            .cpu()
+            .numpy()
+            .astype(np.float32, copy=False)
+        )
 
         try:
             x_aligned = align_counts_to_scfoundation(
@@ -536,7 +555,7 @@ def extract_side_embeddings_scfoundation(
             continue
 
         run_idx_arr = np.asarray(run_idx, dtype=np.int64)
-        queue: List[np.ndarray] = [run_idx_arr]
+        queue: list[np.ndarray] = [run_idx_arr]
         segment_id = 0
         chunk_success = True
 
@@ -629,7 +648,9 @@ def extract_side_embeddings_scfoundation(
     del counts_t
 
     if emb_dim is None:
-        raise RuntimeError(f"{side} embedding failed for all chunks; cannot determine embedding dimension.")
+        raise RuntimeError(
+            f"{side} embedding failed for all chunks; cannot determine embedding dimension."
+        )
 
     return vectors_by_cell, sorted(invalid_cells), emb_dim, stats, chunk_errors
 
@@ -638,16 +659,16 @@ def resolve_scfoundation_assets(
     *,
     project_root: Path,
     model_dir: Path,
-) -> Tuple[Path, Path, Path, Dict[str, str]]:
-    sources: Dict[str, str] = {}
+) -> tuple[Path, Path, Path, dict[str, str]]:
+    sources: dict[str, str] = {}
 
     model_dir_abs = model_dir.resolve()
-    candidates: List[Tuple[Path, str]] = [
+    candidates: list[tuple[Path, str]] = [
         (model_dir_abs / "model/get_embedding.py", "model_dir/model/get_embedding.py"),
         (model_dir_abs / "get_embedding.py", "model_dir/get_embedding.py"),
     ]
 
-    get_embedding_py: Optional[Path] = None
+    get_embedding_py: Path | None = None
     for p, source in candidates:
         if p.is_file():
             get_embedding_py = p.resolve()
@@ -657,15 +678,25 @@ def resolve_scfoundation_assets(
     if get_embedding_py is None:
         raise RuntimeError("Cannot resolve scFoundation get_embedding.py from --model-dir")
 
-    scfoundation_root = get_embedding_py.parent.parent if get_embedding_py.parent.name == "model" else get_embedding_py.parent
+    scfoundation_root = (
+        get_embedding_py.parent.parent
+        if get_embedding_py.parent.name == "model"
+        else get_embedding_py.parent
+    )
 
-    gene_list_candidates: List[Tuple[Path, str]] = [
+    gene_list_candidates: list[tuple[Path, str]] = [
         (scfoundation_root / "OS_scRNA_gene_index.19264.tsv", "root/OS_scRNA_gene_index.19264.tsv"),
-        (scfoundation_root / "model/OS_scRNA_gene_index.19264.tsv", "root/model/OS_scRNA_gene_index.19264.tsv"),
-        (get_embedding_py.parent / "OS_scRNA_gene_index.19264.tsv", "get_embedding_dir/OS_scRNA_gene_index.19264.tsv"),
+        (
+            scfoundation_root / "model/OS_scRNA_gene_index.19264.tsv",
+            "root/model/OS_scRNA_gene_index.19264.tsv",
+        ),
+        (
+            get_embedding_py.parent / "OS_scRNA_gene_index.19264.tsv",
+            "get_embedding_dir/OS_scRNA_gene_index.19264.tsv",
+        ),
     ]
 
-    gene_list_path: Optional[Path] = None
+    gene_list_path: Path | None = None
     for p, source in gene_list_candidates:
         if p.is_file():
             gene_list_path = p.resolve()
@@ -675,7 +706,12 @@ def resolve_scfoundation_assets(
     if gene_list_path is None:
         raise RuntimeError("Cannot resolve OS_scRNA_gene_index.19264.tsv from --model-dir")
 
-    return scfoundation_root.resolve(), get_embedding_py.resolve(), gene_list_path.resolve(), sources
+    return (
+        scfoundation_root.resolve(),
+        get_embedding_py.resolve(),
+        gene_list_path.resolve(),
+        sources,
+    )
 
 
 def main() -> int:
@@ -711,10 +747,10 @@ def main() -> int:
     stage_dir.mkdir(parents=True, exist_ok=True)
     started_at = utc_now_iso()
 
-    assertions: List[Dict[str, object]] = []
-    input_paths: List[Path] = []
-    snapshot_outputs: List[Path] = []
-    stage_outputs: List[Path] = []
+    assertions: list[dict[str, object]] = []
+    input_paths: list[Path] = []
+    snapshot_outputs: list[Path] = []
+    stage_outputs: list[Path] = []
 
     init_global_seed(GLOBAL_SEED)
     assertions.append(
@@ -734,7 +770,7 @@ def main() -> int:
     else:
         fm_cfg = {}
 
-    model_dir: Optional[Path]
+    model_dir: Path | None
     if args.model_dir is not None:
         model_dir = args.model_dir.resolve()
         model_dir_source = "cli(--model-dir)"
@@ -765,9 +801,11 @@ def main() -> int:
         return 5
 
     try:
-        scfoundation_root, get_embedding_py, gene_list_path, asset_sources = resolve_scfoundation_assets(
-            project_root=project_root,
-            model_dir=model_dir,
+        scfoundation_root, get_embedding_py, gene_list_path, asset_sources = (
+            resolve_scfoundation_assets(
+                project_root=project_root,
+                model_dir=model_dir,
+            )
         )
     except Exception as exc:  # noqa: BLE001
         assertions.append(
@@ -784,13 +822,21 @@ def main() -> int:
 
     python_bin = args.python_bin if args.python_bin else str(fm_cfg.get("python_bin", "python"))
     version = str(args.version) if args.version is not None else str(fm_cfg.get("version", "rde"))
-    tgthighres = str(args.tgthighres) if args.tgthighres is not None else str(fm_cfg.get("tgthighres", "f1"))
-    pool_type = str(args.pool_type) if args.pool_type is not None else str(fm_cfg.get("pool_type", "all"))
+    tgthighres = (
+        str(args.tgthighres) if args.tgthighres is not None else str(fm_cfg.get("tgthighres", "f1"))
+    )
+    pool_type = (
+        str(args.pool_type) if args.pool_type is not None else str(fm_cfg.get("pool_type", "all"))
+    )
     pre_normalized = (
-        str(args.pre_normalized) if args.pre_normalized is not None else str(fm_cfg.get("pre_normalized", "F"))
+        str(args.pre_normalized)
+        if args.pre_normalized is not None
+        else str(fm_cfg.get("pre_normalized", "F"))
     )
     cell_chunk_size = (
-        int(args.cell_chunk_size) if args.cell_chunk_size is not None else int(fm_cfg.get("cell_chunk_size", 8000))
+        int(args.cell_chunk_size)
+        if args.cell_chunk_size is not None
+        else int(fm_cfg.get("cell_chunk_size", 8000))
     )
     min_positive_tokens = (
         int(args.min_positive_tokens)
@@ -851,7 +897,9 @@ def main() -> int:
                 "name": "task2_snapshot_inputs_present",
                 "pass": False,
                 "details": {"rules": ["All required inputs must exist."]},
-                "counterexamples": [{"missing_input": str(p)} for p in missing_inputs[:MAX_COUNTEREXAMPLES]],
+                "counterexamples": [
+                    {"missing_input": str(p)} for p in missing_inputs[:MAX_COUNTEREXAMPLES]
+                ],
             }
         )
         write_json(stage_dir / "audit_assertions.json", {"assertions": assertions})
@@ -917,7 +965,9 @@ def main() -> int:
         ["treated_cell_id", "control_cell_id", "control_rank", "n_controls_used", "dataset_side"],
         "pair_list.parquet",
     )
-    ensure_required_columns(delta_meta, ["row_id", "treated_cell_id", "n_controls_used"], "delta_meta.csv")
+    ensure_required_columns(
+        delta_meta, ["row_id", "treated_cell_id", "n_controls_used"], "delta_meta.csv"
+    )
 
     if "dataset_side" not in delta_meta.columns:
         if "perturbation_class" not in delta_meta.columns:
@@ -933,12 +983,18 @@ def main() -> int:
     pair_df["dataset_side"] = pair_df["dataset_side"].astype(str).str.strip().str.upper()
     pair_df["treated_cell_id"] = pair_df["treated_cell_id"].map(normalize_scalar)
     pair_df["control_cell_id"] = pair_df["control_cell_id"].map(normalize_scalar)
-    pair_df["control_rank"] = pd.to_numeric(pair_df["control_rank"], errors="raise").astype(np.int64)
-    pair_df["n_controls_used"] = pd.to_numeric(pair_df["n_controls_used"], errors="raise").astype(np.int64)
+    pair_df["control_rank"] = pd.to_numeric(pair_df["control_rank"], errors="raise").astype(
+        np.int64
+    )
+    pair_df["n_controls_used"] = pd.to_numeric(pair_df["n_controls_used"], errors="raise").astype(
+        np.int64
+    )
 
     delta_meta["row_id"] = pd.to_numeric(delta_meta["row_id"], errors="raise").astype(np.int64)
     delta_meta["treated_cell_id"] = delta_meta["treated_cell_id"].map(normalize_scalar)
-    delta_meta["n_controls_used"] = pd.to_numeric(delta_meta["n_controls_used"], errors="raise").astype(np.int64)
+    delta_meta["n_controls_used"] = pd.to_numeric(
+        delta_meta["n_controls_used"], errors="raise"
+    ).astype(np.int64)
     delta_meta["dataset_side"] = delta_meta["dataset_side"].astype(str).str.strip().str.upper()
     delta_meta = delta_meta.sort_values("row_id", kind="mergesort").reset_index(drop=True)
 
@@ -951,7 +1007,9 @@ def main() -> int:
             "name": "delta_meta_row_id_contiguous",
             "pass": bool(row_alignment_input_ok),
             "details": {
-                "rules": ["delta_meta.row_id must be exactly 0..N-1 for strict row alignment contract"],
+                "rules": [
+                    "delta_meta.row_id must be exactly 0..N-1 for strict row alignment contract"
+                ],
                 "n_rows": n_rows,
             },
             "counterexamples": []
@@ -964,11 +1022,15 @@ def main() -> int:
         print("[ERROR] delta_meta.row_id is not contiguous 0..N-1.", file=sys.stderr)
         return 9
 
-    pair_sorted = pair_df.sort_values(["dataset_side", "treated_cell_id", "control_rank"], kind="mergesort")
-    controls_by_key: Dict[Tuple[str, str], List[str]] = {}
-    pair_contract_violations: List[Dict[str, object]] = []
+    pair_sorted = pair_df.sort_values(
+        ["dataset_side", "treated_cell_id", "control_rank"], kind="mergesort"
+    )
+    controls_by_key: dict[tuple[str, str], list[str]] = {}
+    pair_contract_violations: list[dict[str, object]] = []
 
-    for (side, treated_cell_id), grp in pair_sorted.groupby(["dataset_side", "treated_cell_id"], sort=False):
+    for (side, treated_cell_id), grp in pair_sorted.groupby(
+        ["dataset_side", "treated_cell_id"], sort=False
+    ):
         controls = grp["control_cell_id"].astype(str).tolist()
         n_used_unique = grp["n_controls_used"].unique()
         if len(n_used_unique) != 1:
@@ -1018,7 +1080,7 @@ def main() -> int:
         print("[ERROR] pair_list grouping contract failed.", file=sys.stderr)
         return 10
 
-    required_by_side: Dict[str, set[str]] = {"CRISPR": set(), "DRUG": set()}
+    required_by_side: dict[str, set[str]] = {"CRISPR": set(), "DRUG": set()}
     missing_pair_keys = 0
     for row in delta_meta.itertuples(index=False):
         side = str(row.dataset_side)
@@ -1047,7 +1109,9 @@ def main() -> int:
 
     try:
         sf_genes = load_scfoundation_gene_list(gene_list_path, to_upper=to_upper)
-        src_cols, tgt_cols = build_gene_mapper(shared_genes=shared_genes, sf_genes=sf_genes, to_upper=to_upper)
+        src_cols, tgt_cols = build_gene_mapper(
+            shared_genes=shared_genes, sf_genes=sf_genes, to_upper=to_upper
+        )
     except Exception as exc:  # noqa: BLE001
         assertions.append(
             {
@@ -1075,10 +1139,10 @@ def main() -> int:
         }
     )
 
-    side_vectors: Dict[str, Dict[str, np.ndarray]] = {}
-    side_stats: Dict[str, Dict[str, int]] = {}
-    side_chunk_errors: Dict[str, List[str]] = {}
-    emb_dim: Optional[int] = None
+    side_vectors: dict[str, dict[str, np.ndarray]] = {}
+    side_stats: dict[str, dict[str, int]] = {}
+    side_chunk_errors: dict[str, list[str]] = {}
+    emb_dim: int | None = None
 
     side_specs = [
         ("CRISPR", crispr_meta_path, crispr_counts_path),
@@ -1087,23 +1151,25 @@ def main() -> int:
 
     for side, meta_path, counts_path in side_specs:
         try:
-            vectors, _invalid_cells, side_dim, stats, chunk_errors = extract_side_embeddings_scfoundation(
-                side=side,
-                meta_path=meta_path,
-                counts_path=counts_path,
-                required_cell_ids=sorted(required_by_side.get(side, set())),
-                src_cols=src_cols,
-                tgt_cols=tgt_cols,
-                sf_genes=sf_genes,
-                python_bin=python_bin,
-                get_embedding_py=get_embedding_py,
-                version=version,
-                tgthighres=tgthighres,
-                pool_type=pool_type,
-                pre_normalized=pre_normalized,
-                cell_chunk_size=cell_chunk_size,
-                min_positive_tokens=min_positive_tokens,
-                stage_dir=stage_dir,
+            vectors, _invalid_cells, side_dim, stats, chunk_errors = (
+                extract_side_embeddings_scfoundation(
+                    side=side,
+                    meta_path=meta_path,
+                    counts_path=counts_path,
+                    required_cell_ids=sorted(required_by_side.get(side, set())),
+                    src_cols=src_cols,
+                    tgt_cols=tgt_cols,
+                    sf_genes=sf_genes,
+                    python_bin=python_bin,
+                    get_embedding_py=get_embedding_py,
+                    version=version,
+                    tgthighres=tgthighres,
+                    pool_type=pool_type,
+                    pre_normalized=pre_normalized,
+                    cell_chunk_size=cell_chunk_size,
+                    min_positive_tokens=min_positive_tokens,
+                    stage_dir=stage_dir,
+                )
             )
         except Exception as exc:  # noqa: BLE001
             assertions.append(
@@ -1180,7 +1246,7 @@ def main() -> int:
             invalid_reason[row_id] = "treated_embedding_missing_or_invalid"
             continue
 
-        ctrl_vecs: List[np.ndarray] = []
+        ctrl_vecs: list[np.ndarray] = []
         missing_ctrl = False
         for control_id in controls:
             cvec = side_vectors.get(side, {}).get(control_id)
@@ -1201,8 +1267,12 @@ def main() -> int:
         fm_delta[row_id] = delta_vec.astype(np.float32, copy=False)
         valid_mask[row_id] = True
 
-    valid_finite_ok = bool(np.isfinite(fm_delta[valid_mask]).all()) if bool(valid_mask.any()) else True
-    invalid_nan_ok = bool(np.isnan(fm_delta[~valid_mask]).all()) if bool((~valid_mask).any()) else True
+    valid_finite_ok = (
+        bool(np.isfinite(fm_delta[valid_mask]).all()) if bool(valid_mask.any()) else True
+    )
+    invalid_nan_ok = (
+        bool(np.isnan(fm_delta[~valid_mask]).all()) if bool((~valid_mask).any()) else True
+    )
 
     assertions.append(
         {
@@ -1346,7 +1416,9 @@ def main() -> int:
     run_manifest = {
         "run_id": args.run_id,
         "stage": STAGE,
-        "script_path": str((project_root / "scripts/fm_extractors/extract_scfoundation.py").resolve()),
+        "script_path": str(
+            (project_root / "scripts/fm_extractors/extract_scfoundation.py").resolve()
+        ),
         "git_head": safe_git_head(project_root),
         "started_at": started_at,
         "completed_at": completed_at,
@@ -1375,7 +1447,10 @@ def main() -> int:
             "embedding_dim": int(emb_dim),
             "n_valid": int(valid_mask.sum()),
             "n_invalid": int((~valid_mask).sum()),
-            "invalid_reason_top": pd.Series(invalid_reason[invalid_reason != ""]).value_counts().head(10).to_dict(),
+            "invalid_reason_top": pd.Series(invalid_reason[invalid_reason != ""])
+            .value_counts()
+            .head(10)
+            .to_dict(),
             "side_stats": side_stats,
             "n_overlap_genes": int(len(src_cols)),
         },
@@ -1384,7 +1459,7 @@ def main() -> int:
     write_json(run_manifest_path, run_manifest)
     write_json(audit_assertions_path, {"assertions": assertions})
 
-    manifest_entries: List[Dict[str, object]] = []
+    manifest_entries: list[dict[str, object]] = []
     for file_path in sorted(stage_dir.iterdir()):
         if file_path.is_file() and file_path.name != "manifest.json":
             manifest_entries.append(
@@ -1396,7 +1471,9 @@ def main() -> int:
             )
     write_json(manifest_path, {"stage": STAGE, "files": manifest_entries})
 
-    output_routing_stage_pass = all(path.resolve().is_relative_to(stage_dir.resolve()) for path in stage_outputs)
+    output_routing_stage_pass = all(
+        path.resolve().is_relative_to(stage_dir.resolve()) for path in stage_outputs
+    )
     if not output_routing_stage_pass:
         print("[ERROR] Stage output routing assertion failed.", file=sys.stderr)
         return 14
