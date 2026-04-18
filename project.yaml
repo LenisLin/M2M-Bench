@@ -7,28 +7,19 @@ owner: unknown
 license: unknown
 entrypoints:
   - python -m pip install -e ".[dev]"
-  - python scripts/s0_build_data_inventory.py --run-id <run_id> --seed 619
-  - python scripts/s1_task1_internal_metrics.py --run-id <run_id> --seed 619
-  - python scripts/s2_task1_cross_metrics.py --run-id <run_id> --seed 619
-  - python scripts/s3_build_task2_multisource_snapshot.py --run-id <run_id> --seed 619
-  - python scripts/s4_task2_group_concordance_multisource.py --run-id <run_id> --seed 619
-  - python scripts/s5_task2_retrieval_multisource.py --run-id <run_id> --seed 619
-  - python scripts/s6_task2_result_synthesis_multisource.py --run-id <run_id> --seed 619
-  - python scripts/s7_project_benchmark_synthesis.py --run-id <run_id> --seed 619
+  - python scripts/script1_reconstruct_task_centric_data.py --run-id <run_id>
+  - python scripts/script1_cutover_task_centric_data.py --candidate-root /mnt/NAS_21T/ProjectData/M2M/data_candidate
 datasets:
   - LINCS
   - scPerturb
   - scPerturb K562
 outputs:
-  - runs/<run_id>/s0_build_data_inventory/task1_data_inventory_long.csv
-  - runs/<run_id>/s1_task1_internal_metrics/task1_leaderboard_long.csv
-  - runs/<run_id>/s2_task1_cross_metrics/task1_cross_alignment_proof.csv
-  - data/task2_snapshot_v2/snapshot_manifest.json
-  - runs/<run_id>/s4_task2_group_concordance_multisource/task2_group_concordance.csv
-  - runs/<run_id>/s5_task2_retrieval_multisource/task2_retrieval_summary.csv
-  - runs/<run_id>/s6_task2_result_synthesis_multisource/task2_benchmark_summary_long.csv
-  - runs/<run_id>/s7_project_benchmark_synthesis/project_benchmark_summary_long.csv
-  - runs/<run_id>/s7_project_benchmark_synthesis/project_representation_scorecard.csv
+  - data_candidate/task1/manifest.json
+  - data_candidate/task2/manifest.json
+  - runs/task_centric_migration/<run_id>/migration_report/migration_report.json
+  - runs/task_centric_migration/<run_id>/migration_report/migration_path_map.csv
+  - runs/task_centric_migration/<run_id>/validation/task1/task1_validation.json
+  - runs/task_centric_migration/<run_id>/validation/task2/task2_validation.json
 components:
   - docs/contracts/
   - docs/governance/
