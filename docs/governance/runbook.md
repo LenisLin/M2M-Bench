@@ -1,126 +1,38 @@
-## 1. Pipeline Step Map
+# Runbook
 
-**原则**：每个 step 只有一个入口脚本；新增 step 才允许新增脚本；逻辑复用必须进入 `src/m2mbench/`。
+## Active Stage Map
 
-### 1.1 当前保留的 legacy / interim Task2 stages
+| Stage | Purpose | Primary outputs |
+| --- | --- | --- |
+| `S0` | data inventory | `task1_data_inventory_long.csv`, `data_source_manifest.csv` |
+| `S1` | Task1 internal metrics | `task1_group_concordance_long.csv`, `task1_retrieval_per_query.parquet`, `task1_retrieval_summary.csv`, `task1_leaderboard_long.csv` |
+| `S2` | Task1 cross metrics | `task1_group_concordance_long.csv`, `task1_retrieval_per_query.parquet`, `task1_retrieval_summary.csv`, `task1_cross_alignment_proof.csv` |
+| `S3` | Task2 multisource cohort build | `task2_pairs_coverage.csv`, `task2_row_membership.parquet`, `delta_meta.csv`, `representation_availability_registry.csv`, `snapshot_manifest.json` |
+| `S4` | Task2 group concordance | `task2_group_concordance_long.csv`, `task2_group_leaderboard.csv` |
+| `S5` | Task2 retrieval | `task2_retrieval_per_query.parquet`, `task2_retrieval_summary_long.csv`, `task2_retrieval_leaderboard.csv` |
+| `S6` | Task2 synthesis | `task2_benchmark_summary_long.csv` |
+| `S7` | project synthesis | `project_input_registry.csv`, `project_benchmark_summary_long.csv`, `project_axis_score_inputs_long.csv`, `project_representation_scorecard.csv` |
 
-这些 stage 对应当前已审计的 scPerturb-K562 Task2 历史证据，必须保留，但不再代表 corrected Task2 v1 的最终 stage map。
+## Active Roots
 
-| Legacy step | Script | Status | Purpose |
-| ---- | ---- | ---- | ---- |
-| S3-legacy | `scripts/s3_build_task2_snapshot.py` | preserved | scPerturb-K562 snapshot build only |
-| S4-legacy | `scripts/s4_task2_group_concordance.py` | preserved | scPerturb-K562 group concordance only |
-| S5-legacy | `scripts/s5_task2_retrieval.py` | preserved | scPerturb-K562 retrieval only |
-| S6-legacy | `scripts/s6_task2_result_synthesis.py` | preserved | scPerturb-K562 synthesis only |
+- Task1 data: `/mnt/NAS_21T/ProjectData/M2M/data/task1`
+- Task2 data: `/mnt/NAS_21T/ProjectData/M2M/data/task2`
+- Stage runs: `/mnt/NAS_21T/ProjectData/M2M/runs`
+- Manuscript analysis: `/mnt/NAS_21T/ProjectData/M2M/runs/manuscript_active/analysis`
+- Plot review export: `/mnt/NAS_21T/ProjectData/M2M/runs/_staging/manuscript_visual_revision_current`
 
-### 1.2 Corrected successor stage map for Task2
+## Stage Bundle Rule
 
-下表是 corrected multisource Task2 的 authoritative stage map。当前脚本文件名与 canonical outputs 以本地已物化实现为准。
+Every stage writes:
 
-| Step | Script | Purpose | Canonical outputs (must exist) |
-| ---- | ---- | ---- | ---- |
-| S0 | `scripts/s0_build_data_inventory.py` | 盘点原始输入生态（不依赖 Task2 snapshot） | `task1_data_inventory_long.csv`, `data_source_manifest.csv` |
-| S1 | `scripts/s1_task1_internal_metrics.py` | Task1 internal 指标 | `task1_retrieval_per_query.parquet`, `task1_retrieval_summary.csv`, `task1_chance_identity_check.csv`, `task1_leaderboard_long.csv`, `task1_attrition.csv` |
-| S2 | `scripts/s2_task1_cross_metrics.py` | Task1 cross matched pairs（eligibility gate） | `task1_cross_*` 全套 + `task1_cross_alignment_proof.csv` + attrition |
-| S3 | `scripts/s3_build_task2_multisource_snapshot.py` | corrected Task2 multisource snapshot build | `task2_pairs_coverage.csv`, optional `task2_post_build_inventory.csv`, snapshot manifests |
-| S4 | `scripts/s4_task2_group_concordance_multisource.py` | corrected Task2 group concordance | `task2_group_concordance.csv`, `task2_group_attrition.csv` |
-| S5 | `scripts/s5_task2_retrieval_multisource.py` | corrected Task2 target-level retrieval（C2G/G2C multi-positive） | `task2_retrieval_per_query.parquet`, `task2_retrieval_summary.csv`, `task2_retrieval_summary_long.csv`, `task2_retrieval_attrition.csv`, `task2_chance_identity_check.csv` |
-| S6 | `scripts/s6_task2_result_synthesis_multisource.py` | corrected Task2 synthesis / reporting | `task2_group_concordance_long.csv`, `task2_group_leaderboard.csv`, `task2_retrieval_leaderboard.csv`, `task2_benchmark_summary_long.csv` |
-| S7 | `scripts/s7_project_benchmark_synthesis.py` | project-level benchmark synthesis | `project_input_registry.csv`, `project_benchmark_summary_long.csv`, `project_axis_score_inputs_long.csv`, `project_representation_scorecard.csv` |
+- `run_manifest.json`
+- `audit_assertions.json`
+- `manifest.json`
+- the stage tables defined in `docs/contracts/output-schemas.md`
 
-### 1.3 Retired later-stage entries
+## Stage Execution Rules
 
-早期探索性的 later-stage 产物不再属于 corrected Task2 v1 的
-authoritative stage map。若未来要恢复这些分析，必须作为单独审批后的
-later-stage work 重新引入，而不是恢复旧入口脚本。
-
----
-
-## 2. Directory Structure
-
-* `/mnt/NAS_21T/ProjectData/M2M/snapshots/task1_snapshot_v1/`：只读；Task1 输入快照
-* `/mnt/NAS_21T/ProjectData/M2M/snapshots/task2_snapshot_v1/`：只读；当前 legacy/interim scPerturb-K562 Task2 证据
-* `/mnt/NAS_21T/ProjectData/M2M/snapshots/task2_snapshot_v2/`：corrected multisource Task2 successor snapshot root（当前已冻结并物化）
-* `src/m2mbench/`：复用库代码（metrics、chance correction、io schema、assertions）
-* `scripts/`：仅入口脚本；禁止复制大段逻辑
-* `runs/<run_id>/<stage>/`：stage contract notation；authoritative materializations resolve under `/mnt/NAS_21T/ProjectData/M2M/runs/...`
-* `/mnt/NAS_21T/ProjectData/M2M/runs/_registry/`：运行登记
-* `docs/`：contracts、pipeline、governance、story 等文档
-
----
-
-## 2.1 Storage Backing
-
-**原则**：authoritative benchmark outputs 可以迁移出本地磁盘；脚本 contract 与 evidence discovery 必须优先以 NAS-backed authoritative roots 为准。
-
-* active authoritative results:
-  * `/mnt/NAS_21T/ProjectData/M2M/runs`
-* historical/archive results:
-  * `/mnt/NAS_21T/ProjectData/M2M/archive/runs`
-* archived reports:
-  * `/mnt/NAS_21T/ProjectData/M2M/archive/reports`
-* canonical manuscript analysis:
-  * `/mnt/NAS_21T/ProjectData/M2M/runs/manuscript_active/analysis`
-* active manuscript support:
-  * `/mnt/NAS_21T/ProjectData/M2M/runs/manuscript_support`
-* historical manuscript archive:
-  * `/mnt/NAS_21T/ProjectData/M2M/archive/manuscript_history`
-* local checkout:
-  * repo-root `runs/`、`data/` snapshots、`tmp/`、`tmp_r_lib/` 不应保留结果或 staging 内容
-  * 若需要 review/export staging，必须写到 NAS-backed staging root
-* plotting/runtime rule:
-  * R 渲染必须运行在 conda 环境 `Spatial`
-  * 不允许通过 repo-local 临时库或缓存重定向来补齐 R 依赖
-
-参见：`docs/governance/local_storage_policy.md`
-
----
-
-## 3. Script Contract
-
-每个 `scripts/Sx_*.py` 必须满足：
-
-1. 单一入口：`if __name__ == "__main__": main()`
-2. 顶部 docstring 必写：Inputs / Outputs / Frozen constants / Attrition rules
-3. 统一 CLI：至少包含 `--project-root`, `--run-id`, `--seed`（默认 619）
-4. 输出三件套：
-   * `run_manifest.json`
-   * `audit_assertions.json`
-   * `manifest.json`
-5. 所有输出只能写入该 run 的 stage directory；文档中通常记为 `runs/<run_id>/<stage>/`，但当前 authoritative materializations may resolve to NAS-backed paths via configuration
-6. 多线程只用于计算加速，不得改变 seed、排序、subsample 或分母口径
-
----
-
-## 4. Canonical Output Principles
-
-* 所有 plot-ready / synthesis-ready 表优先使用 long-format
-* 所有 summary 表必须携带分母字段
-* per-query 表用于审计证据，不强制 long，但字段必须完整
-* representation not applicable 必须作为 scope policy 明示，不能伪装成 attrition
-* corrected Task2 v1 的 core metrics 必须按 `dataset` 与 `cell_line` 分层，禁止 raw-pool LINCS 与 scPerturb
-
----
-
-## 5. Run Preservation
-
-**原则**：脚本内部不得自动删除 runs；由显式 cleanup 脚本执行。
-
-* registry：配置的 run root 下的 `_registry/story_runs.csv`
-* 字段：`run_id, stage, status, created_at, notes`
-* legacy/interim Task2 runs 必须保留并可标记为 `superseded`
-* corrected successor runs 另行登记，不覆盖 legacy 历史记录
-* 若 authoritative runs 已迁移到 NAS，只要 audited run roots 在 authoritative storage 中可发现并与 manifests 一致，就视为 preservation contract 满足
-
----
-
-## 6. Step-level Assertion Summary
-
-* S0：输入文件与关键列存在
-* S1：LOO strict_recompute；chance identity <=1e-12；分母守恒
-* S2：cross alignment contract；eligibility gate；chance identity <=1e-12
-* S3：LINCS + scPerturb 双源 snapshot readiness；representation-scope policy 明确；pairing 证据可审计
-* S4：按 `dataset, cell_line, target_token` 计算；禁止 raw-pool；`edist` 不得作为 cross-representation rank
-* S5：按 `dataset, cell_line, direction` 计算；C2G 使用 genetic target centroids，G2C 使用 chemical target centroids；G2C `N_gallery` 计数的是 validity filtering 后的 chemical target centroids；不再依赖 chemical-context reconstruction；C2G 与 G2C 不得合并；chance identity <=1e-12
-* S6：仅消费审计通过的 S4/S5 输出；`task2_benchmark_summary_long.csv` 只能从 leaderboard 层构造
-* S7：只做跨任务 / 项目级 synthesis；不回写 Task2 core metrics
+- One stage writes to one run directory.
+- Task2 core metrics stay within each `dataset` and `cell_line`.
+- `C2G` and `G2C` stay separate in Task2 retrieval outputs.
+- The local checkout is source-only.
